@@ -31,6 +31,8 @@ LOGICAL_SERVICE_MAP = {
     'www.gothamsports.com': 'gotham',
     'beinsports.com': 'bein',
     'www.beinsports.com': 'bein',
+    'watch.nesn.com': 'nesn_web',
+    'www.watch.nesn.com': 'nesn_web',
 }
 
 # Display names for logical services
@@ -82,6 +84,9 @@ SERVICE_DISPLAY_NAMES = {
     'apple_nhl': 'Apple NHL',
     'apple_other': 'Apple TV+',
     
+    # NESN Regional Sports Network (NEW)
+    'nesn': 'NESN 360',
+    
     # Amazon-hosted services (NEW)
     'aiv_prime': 'Amazon - Prime Exclusive',
     'aiv_nba_league_pass': 'Amazon - NBA League Pass',
@@ -90,6 +95,7 @@ SERVICE_DISPLAY_NAMES = {
     'aiv_fox': 'Amazon - FOX One',
     'aiv_vix_premium': 'Amazon - ViX Premium',
     'aiv_vix': 'Amazon - ViX',
+    'aiv_tennis_channel': 'Amazon - Tennis Channel',
     'aiv_fanduel': 'Amazon - FanDuel Sports Network',
     'aiv_max': 'Amazon - Max',
     'aiv_paramount_plus': 'Amazon - Paramount+',
@@ -294,6 +300,10 @@ def get_logical_service_for_playable(
     if provider == 'bein':
         return 'bein'
     
+    # NESN provider: single service with multiple playables
+    if provider == 'nesn':
+        return 'nesn'
+    
     # Non-web providers: use provider as-is
     if provider not in ('http', 'https', None, ''):
         return provider
@@ -457,9 +467,11 @@ def get_logical_service_priority(service_code: str) -> int:
         'victory': 19,   # Victory+ (WHL, LOVB, other niche sports)
         'gotham': 20,    # Gotham Sports (MSG/YES Network - NYC regional)
         'marquee': 20,   # Marquee Sports Network (Chicago regional)
+        'nesn': 19,      # NESN 360 (New England regional sports)
         'vixapp': 21,
         'aiv_vix_premium': 21,       # ViX on Amazon - same as direct
         'aiv_vix': 21,
+        'aiv_tennis_channel': 22,    # Tennis Channel on Amazon
         'aiv_fanduel': 22,           # FanDuel Sports Network
         'nflctv': 22,
         'watchtru': 23,

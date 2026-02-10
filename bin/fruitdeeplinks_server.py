@@ -79,6 +79,7 @@ try:
         "aiv_wnba_league_pass": "Amazon - WNBA League Pass",
         "aiv_vix_premium": "Amazon - ViX Premium",
         "aiv_vix": "Amazon - ViX",
+        "aiv_tennis_channel": "Amazon - Tennis Channel",
         "aiv_fanduel": "Amazon - FanDuel Sports Network",
         "aiv_dazn": "Amazon - DAZN",
         "aiv_willow": "Amazon - Willow",
