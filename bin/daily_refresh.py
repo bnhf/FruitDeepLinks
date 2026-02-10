@@ -478,6 +478,24 @@ def main(argv=None):
         ]):
             return 1
 
+    # Step 2c: Scrape NESN (New England Sports Network)
+    nesn_days = os.getenv("NESN_DAYS", "7")
+    nesn_json = OUT_DIR / "nesn_raw.json"
+
+    if skip_scrape:
+        print("\n" + "=" * 60)
+        print(f"[2c/{total_steps}] Scraping NESN ({nesn_days} days). SKIPPED")
+        print("=" * 60)
+        if not nesn_json.exists():
+            print(f"WARNING: --skip-scrape set but {nesn_json} not found; NESN ingest will be skipped.")
+    else:
+        if not run_step("2c", total_steps, f"Scraping NESN ({nesn_days} days)", [
+            "python3", "nesn_scrape.py",
+            "--out", str(nesn_json),
+            "--days", nesn_days,
+        ]):
+            return 1
+
     # Fresh-install safety: ensure DB file exists before migrations
     if not DB_PATH.exists():
         print("\n" + "=" * 60)
@@ -668,6 +686,18 @@ def main(argv=None):
             return 1
     else:
         print(f"\n[7-bein/{total_steps}] beIN data not found at {bein_json}, skipping ingest")
+
+    # Step 7-nesn: Import NESN events
+    nesn_json = OUT_DIR / "nesn_raw.json"
+    if nesn_json.exists():
+        if not run_step("7-nesn", total_steps, "Importing NESN events to database", [
+            "python3", "ingest_nesn.py",
+            "--db", str(DB_PATH),
+            "--nesn-json", str(nesn_json),
+        ]):
+            return 1
+    else:
+        print(f"\n[7-nesn/{total_steps}] NESN data not found at {nesn_json}, skipping ingest")
 
     # Step 7a: Scrape Victory+ events
     # Victory+ uses guest authentication (no user credentials required)
