@@ -441,36 +441,33 @@ def build_direct_xmltv(
         if FILTERING_AVAILABLE and deeplink_url:
             try:
                 from logical_service_mapper import get_service_display_name, get_logical_service_for_playable
-                from provider_utils import extract_provider_from_url
+                from provider_utils import extract_provider_from_url, get_provider_display_name, get_display_name_from_domain
                 
                 # Extract provider from the actual deeplink URL scheme
                 scheme = extract_provider_from_url(deeplink_url)
-                if scheme and scheme not in ("http", "https"):
-                    # For non-web deeplinks, get the logical service
-                    logical_service = get_logical_service_for_playable(
-                        provider=scheme,
-                        deeplink_play=deeplink_url,
-                        deeplink_open=None,
-                        playable_url=None,
-                        event_id=event_id,
-                        conn=conn,
-                    )
-                    provider = get_service_display_name(logical_service)
+                
+                # Check if it's a recognized provider scheme
+                if scheme and scheme not in ("http", "https", "unknown"):
+                    # Try to get display name from provider_utils first
+                    provider = get_provider_display_name(scheme)
+                    # If it's not in provider_utils, try logical service mapper
+                    if provider == scheme.upper():  # Fallback display (not found)
+                        try:
+                            logical_service = get_logical_service_for_playable(
+                                provider=scheme,
+                                deeplink_play=deeplink_url,
+                                deeplink_open=None,
+                                playable_url=None,
+                                event_id=event_id,
+                                conn=conn,
+                            )
+                            provider = get_service_display_name(logical_service)
+                        except:
+                            pass
                 elif scheme in ("http", "https"):
-                    # For web URLs, check the domain for better labeling
-                    if "victoryplus.com" in deeplink_url:
-                        provider = "Victory+"
-                    elif "gothamfc.com" in deeplink_url:
-                        provider = "Gotham FC"
-                    elif "gothamsports.com" in deeplink_url:
-                        provider = "Gotham Sports"
-                    elif "watch.tbs.com" in deeplink_url or "watchtbs" in deeplink_url:
-                        provider = "TBS"
-                    elif "watch.fanatiz.com" in deeplink_url or "fanatiz.com" in deeplink_url:
-                        provider = "Fanatiz Soccer"
-                    elif "beinsports.com" in deeplink_url or "bein" in deeplink_url.lower():
-                        provider = "beIN Sports"
-                    else:
+                    # For web URLs, check domain for provider name
+                    provider = get_display_name_from_domain(deeplink_url)
+                    if not provider:
                         provider = "Web"
             except Exception as e:
                 # Fall back to database channel_name if detection fails
@@ -768,32 +765,31 @@ def build_direct_m3u(
             if FILTERING_AVAILABLE:
                 try:
                     from logical_service_mapper import get_service_display_name, get_logical_service_for_playable
-                    from provider_utils import extract_provider_from_url
+                    from provider_utils import extract_provider_from_url, get_provider_display_name, get_display_name_from_domain
                     
                     # Extract provider from the actual deeplink URL scheme
                     scheme = extract_provider_from_url(deeplink_url)
-                    if scheme and scheme not in ("http", "https"):
-                        # For non-web deeplinks, get the logical service
-                        logical_service = get_logical_service_for_playable(
-                            provider=scheme,
-                            deeplink_play=deeplink_url,
-                            deeplink_open=None,
-                            playable_url=None,
-                            event_id=event_id,
-                            conn=conn,
-                        )
-                        actual_provider = get_service_display_name(logical_service)
+                    if scheme and scheme not in ("http", "https", "unknown"):
+                        # For non-web deeplinks, get the display name
+                        actual_provider = get_provider_display_name(scheme)
+                        # If not found, try logical service mapper
+                        if actual_provider == scheme.upper():
+                            try:
+                                logical_service = get_logical_service_for_playable(
+                                    provider=scheme,
+                                    deeplink_play=deeplink_url,
+                                    deeplink_open=None,
+                                    playable_url=None,
+                                    event_id=event_id,
+                                    conn=conn,
+                                )
+                                actual_provider = get_service_display_name(logical_service)
+                            except:
+                                pass
                     elif scheme in ("http", "https"):
-                        # For web URLs, check the domain for better labeling
-                        if "victoryplus.com" in deeplink_url:
-                            actual_provider = "Victory+"
-                        elif "gothamfc.com" in deeplink_url:
-                            actual_provider = "Gotham FC"
-                        elif "gothamsports.com" in deeplink_url:
-                            actual_provider = "Gotham Sports"
-                        elif "watch.tbs.com" in deeplink_url or "watchtbs" in deeplink_url:
-                            actual_provider = "TBS"
-                        else:
+                        # For web URLs, check the domain
+                        actual_provider = get_display_name_from_domain(deeplink_url)
+                        if not actual_provider:
                             actual_provider = "Web"
                 except Exception as e:
                     # If detection fails, we'll use fallback below

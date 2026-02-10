@@ -35,6 +35,8 @@ PROVIDER_MAP = {
     
     # Regional Sports Networks
     'marquee': 'Marquee Sports Network',
+    'nesn': 'NESN 360',
+    'com.nesn.nesnplayer': 'NESN 360',  # Android app scheme
     
     # Other
     'dazn': 'DAZN',
@@ -66,6 +68,7 @@ DEFAULT_PROVIDER_PRIORITY = [
     'vixapp',           # ViX
     'f1tv',             # F1 TV
     'marquee',          # Marquee Sports Network
+    'nesn',             # NESN 360 (New England regional)
     'nflctv',           # NFL+
     'videos',           # Apple TV+
     'cbstve',           # CBS
@@ -95,6 +98,44 @@ def extract_provider_from_url(url: str) -> str:
         return url.split('://')[0]
     
     return 'unknown'
+
+
+def get_display_name_from_domain(url: str) -> str:
+    """
+    Get provider display name by analyzing URL domain.
+    Used for web-based services where scheme is https/http.
+    
+    Examples:
+        https://www.victoryplus.com/... -> Victory+
+        https://www.gothamsports.com/... -> Gotham Sports
+        https://watch.fanatiz.com/... -> Fanatiz Soccer
+    """
+    if not url:
+        return None
+    
+    # Regional sports networks
+    if "victoryplus.com" in url:
+        return "Victory+"
+    elif "gothamfc.com" in url:
+        return "Gotham FC"
+    elif "gothamsports.com" in url:
+        return "Gotham Sports"
+    
+    # Premium cable networks
+    elif "watch.tbs.com" in url or "watchtbs" in url:
+        return "TBS"
+    
+    # International/regional soccer
+    elif "watch.fanatiz.com" in url or "fanatiz.com" in url:
+        return "Fanatiz Soccer"
+    elif "beinsports.com" in url or "bein" in url.lower():
+        return "beIN Sports"
+    
+    # Regional sports
+    elif "watch.nesn.com" in url:
+        return "NESN 360"
+    
+    return None
 
 
 def get_provider_display_name(provider_scheme: str) -> str:
