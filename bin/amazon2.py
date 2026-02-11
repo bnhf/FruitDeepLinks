@@ -636,34 +636,44 @@ def upsert_results(db_path: str, results: Sequence[ScrapeResult]) -> int:
             
             # AUTO-REGISTER NEW SERVICE IN amazon_services TABLE
             # This ensures discovered services automatically appear in filters
-            if r.channel_id and r.channel_name and r.status == "SUCCESS":
+            # Skip auto-registration for unknown/error services
+            if r.channel_id and r.channel_name and r.status == "SUCCESS" and not r.channel_name.lower().startswith("error"):
                 try:
                     # Check if amazon_services table exists
                     cur = conn.execute(
                         "SELECT name FROM sqlite_master WHERE type='table' AND name='amazon_services'"
                     )
                     if cur.fetchone():
-                        # Check if this channel_id already registered
+                        # Check if this benefit_id (actual Amazon channel) is already registered
                         cur = conn.execute(
                             "SELECT service_id FROM amazon_services WHERE amazon_channel_id = ?",
-                            (r.channel_id,)
+                            (r.benefit_id,)
                         )
-                        if not cur.fetchone():
+                        existing = cur.fetchone()
+                        
+                        if not existing:
                             # New service - auto-register it
                             # Use the logical service (aiv_*) as the service_id
                             service_id = r.channel_id or r.channel_name.lower().replace(" ", "_")
                             service_id = f"aiv_{service_id}" if not service_id.startswith("aiv_") else service_id
                             
-                            conn.execute(
-                                "INSERT OR IGNORE INTO amazon_services "
-                                "(service_id, display_name, amazon_channel_id, logical_service, sort_order) "
-                                "VALUES (?, ?, ?, ?, 90)",
-                                (service_id, f"Amazon - {r.channel_name}", r.channel_id, r.channel_id)
-                            )
-                            LOG.info(
-                                "Auto-registered new service: service_id=%s display_name=%s channel_id=%s",
-                                service_id, r.channel_name, r.channel_id
-                            )
+                            try:
+                                conn.execute(
+                                    "INSERT INTO amazon_services "
+                                    "(service_id, display_name, amazon_channel_id, logical_service, sort_order) "
+                                    "VALUES (?, ?, ?, ?, 90)",
+                                    (service_id, f"Amazon - {r.channel_name}", r.benefit_id, service_id)
+                                )
+                                LOG.info(
+                                    "Auto-registered new service: service_id=%s display_name=%s channel_id=%s",
+                                    service_id, r.channel_name, r.benefit_id
+                                )
+                            except Exception as insert_err:
+                                # Handle unique constraint violations gracefully
+                                if "UNIQUE" in str(insert_err) or "unique" in str(insert_err).lower():
+                                    LOG.debug("Service already registered: %s", service_id)
+                                else:
+                                    raise
                 except Exception as e:
                     # Silently fail if amazon_services not available (graceful degradation)
                     LOG.debug("Could not auto-register service: %s", e)
