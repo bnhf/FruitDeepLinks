@@ -166,6 +166,7 @@ Enable daily auto refresh
 
 <script>
 let logEventSource;
+let _scrollListenerAttached = false;
 
 async function loadStatus() {
 try {
@@ -500,7 +501,9 @@ function setupLogStream() {
   const container = document.getElementById("log-container");
 
   // Persist scroll position when user scrolls up (and restore it on return)
-  if (container) {
+  // Only attach listener once - setupLogStream may be called multiple times on reconnect
+  if (container && !_scrollListenerAttached) {
+    _scrollListenerAttached = true;
     container.addEventListener("scroll", () => {
       if (!_isAtBottom(container)) {
         try { sessionStorage.setItem(LOG_STORE_SCROLL_KEY, String(container.scrollTop)); } catch (e) {}
