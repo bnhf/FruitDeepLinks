@@ -306,9 +306,40 @@ def ingest_kayo_events(conn: sqlite3.Connection, path: Path) -> int:
 
     print(f"[KAYO] Ingesting {len(events)} events from {path}")
     inserted = 0
+    skipped_old = 0
     for raw_event in events:
         try:
             event_row, playable_rows = normalize_kayo_event(raw_event)
+            
+            # Skip OLD events to prevent re-importing stale historical data
+            # This matches the cleanup logic in daily_refresh.py Step 5c
+            start_utc = event_row.get("start_utc")
+            end_utc = event_row.get("end_utc")
+            
+            if start_utc:
+                try:
+                    start_dt = datetime.fromisoformat(start_utc.replace('Z', '+00:00'))
+                    days_since_start = (datetime.now(timezone.utc) - start_dt).total_seconds() / 86400
+                    
+                    # Skip events that started 2+ days ago with no end time
+                    if days_since_start > 2 and not end_utc:
+                        skipped_old += 1
+                        continue
+                    
+                    # Skip events that ENDED more than 1 day ago
+                    if end_utc:
+                        try:
+                            end_dt = datetime.fromisoformat(end_utc.replace('Z', '+00:00'))
+                            days_since_end = (datetime.now(timezone.utc) - end_dt).total_seconds() / 86400
+                            if days_since_end > 1:
+                                skipped_old += 1
+                                continue
+                        except (ValueError, AttributeError):
+                            pass  # If parsing fails, import anyway
+                            
+                except (ValueError, AttributeError):
+                    pass  # If parsing fails, import anyway
+            
             upsert_event(conn, event_row)
             upsert_playables(conn, playable_rows)
             inserted += 1
@@ -317,6 +348,8 @@ def ingest_kayo_events(conn: sqlite3.Connection, path: Path) -> int:
             continue
 
     conn.commit()
+    if skipped_old > 0:
+        print(f"[KAYO] Skipped {skipped_old} old events (ended >1 day ago or started >2 days ago with no end time)")
     print(f"[KAYO] Upserted {inserted} events into DB.")
     return inserted
 

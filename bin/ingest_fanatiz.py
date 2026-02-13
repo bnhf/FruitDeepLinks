@@ -98,6 +98,35 @@ class FanatizIngestor:
         external_id = event['external_id']
         event_id = f"{self.PROVIDER}-{external_id}"
         
+        # Skip OLD events to prevent re-importing stale historical data
+        # This matches the cleanup logic in daily_refresh.py Step 5c
+        start_utc = event.get('start_utc')
+        end_utc = event.get('end_utc')
+        
+        if start_utc:
+            try:
+                start_dt = datetime.fromisoformat(start_utc.replace('Z', '+00:00'))
+                days_since_start = (datetime.now(timezone.utc) - start_dt).total_seconds() / 86400
+                
+                # Skip events that started 2+ days ago with no end time
+                if days_since_start > 2 and not end_utc:
+                    logger.info(f"Skipping old event {event_id} (started {days_since_start:.1f} days ago, no end time)")
+                    return
+                
+                # Skip events that ENDED more than 1 day ago
+                if end_utc:
+                    try:
+                        end_dt = datetime.fromisoformat(end_utc.replace('Z', '+00:00'))
+                        days_since_end = (datetime.now(timezone.utc) - end_dt).total_seconds() / 86400
+                        if days_since_end > 1:
+                            logger.info(f"Skipping old event {event_id} (ended {days_since_end:.1f} days ago)")
+                            return
+                    except (ValueError, AttributeError):
+                        pass  # If parsing fails, import anyway
+                        
+            except (ValueError, AttributeError):
+                pass  # If parsing fails, import anyway
+        
         # Build genres_json (sport + league)
         sport = event.get('sport', 'Soccer')
         league = event.get('league', sport)

@@ -786,17 +786,31 @@ def main():
         # Normalize ONCE - use for everything
         normalized = normalize_event_structure(e)
         
-        # Skip events that started 2+ days ago with no end time (Apple's incomplete historical data)
-        # These are old live events that Apple keeps returning without end times
+        # Skip OLD events to prevent re-importing stale historical data
+        # This matches the cleanup logic in daily_refresh.py Step 5c
         start_time_str = normalized.get("start_time")
         end_time_str = normalized.get("end_time")
-        if start_time_str and not end_time_str:
+        
+        if start_time_str:
             try:
                 start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
                 days_since_start = (datetime.now(timezone.utc) - start_dt).total_seconds() / 86400
-                if days_since_start > 2:
-                    # Skip old event with no end time
+                
+                # Skip events that started 2+ days ago with no end time
+                if days_since_start > 2 and not end_time_str:
                     continue
+                
+                # Skip events that ENDED more than 1 day ago (regardless of start time)
+                if end_time_str:
+                    try:
+                        end_dt = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                        days_since_end = (datetime.now(timezone.utc) - end_dt).total_seconds() / 86400
+                        if days_since_end > 1:
+                            # Skip old completed event
+                            continue
+                    except (ValueError, AttributeError):
+                        pass  # If parsing fails, import anyway
+                        
             except (ValueError, AttributeError):
                 pass  # If parsing fails, import anyway
         
