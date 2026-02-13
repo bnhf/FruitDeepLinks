@@ -368,6 +368,47 @@ def build_ch4c_m3u(conn: sqlite3.Connection, m3u_path: str, server_url: str, epg
     Path(m3u_path).parent.mkdir(parents=True, exist_ok=True)
     print(f"Wrote CH4C M3U: {m3u_path}")
 
+# -------------------- PrismCast M3U --------------------
+def build_prismcast_m3u(conn: sqlite3.Connection, m3u_path: str, server_url: str, epg_prefix: str = "lane."):
+    """Export lanes to PrismCast M3U playlist format"""
+    
+    # Get all lanes
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM lanes ORDER BY lane_id")
+    lanes = [dict(row) for row in cur.fetchall()]
+    
+    if not lanes:
+        print("No lanes found in database!")
+        return
+    
+    print(f"PrismCast M3U: {len(lanes)} virtual channels")
+    
+    # Get PrismCast server settings from environment
+    pcast_server = os.getenv("PCAST_SERVER", "localhost")
+    pcast_port = os.getenv("PCAST_PORT", "5589")
+    
+    with open(m3u_path, "w", encoding="utf-8") as f:
+        f.write("#EXTM3U\n\n")
+        
+        for lane in lanes:
+            lane_id = lane["lane_id"]
+            chan_id = f"{epg_prefix}{lane_id}"
+            name = lane.get("name") or f"Fruit Lane {lane_id}"
+            chno = lane.get("logical_number") or lane_id
+            
+            # Build the deeplink API URL (returns http deeplink text)
+            deeplink_api_url = f"{server_url}/api/lane/{lane_id}/launch?deeplink_format=http"
+            
+            # PrismCast /play format: pcast_server:pcast_port/play?url=<api_url>
+            # No URL encoding needed - PrismCast handles it fine and keeps it readable
+            stream_url = f"http://{pcast_server}:{pcast_port}/play?url={deeplink_api_url}"
+            
+            f.write(f'#EXTINF:-1 tvg-id="{chan_id}" tvg-name="{name}" tvg-chno="{chno}" group-title="Sports Lanes",{name}\n')
+            f.write(f"{stream_url}\n\n")
+    
+    Path(m3u_path).parent.mkdir(parents=True, exist_ok=True)
+    print(f"Wrote PrismCast M3U: {m3u_path}")
+
 # -------------------- CLI --------------------
 def main():
     script_dir = Path(__file__).resolve().parent
@@ -378,6 +419,7 @@ def main():
     default_m3u = str(repo_root / 'out' / 'multisource_lanes.m3u')
     default_chrome_m3u = str(repo_root / 'out' / 'multisource_lanes_chrome.m3u')
     default_ch4c_m3u = str(repo_root / 'out' / 'multisource_lanes_ch4c.m3u')
+    default_pcast_m3u = str(repo_root / 'out' / 'multisource_lanes_prismcast.m3u')
     
     ap = argparse.ArgumentParser(description="Export virtual channel lanes to XMLTV/M3U")
     ap.add_argument("--db", default=(os.getenv("FRUIT_DB_PATH") or os.getenv("PEACOCK_DB_PATH") or default_db))
@@ -385,15 +427,17 @@ def main():
     ap.add_argument("--m3u", default=default_m3u, help="Output M3U playlist")
     ap.add_argument("--chrome-m3u", default=default_chrome_m3u, help="Output Chrome Capture M3U")
     ap.add_argument("--ch4c-m3u", default=default_ch4c_m3u, help="Output Channels4Chrome M3U")
+    ap.add_argument("--pcast-m3u", default=default_pcast_m3u, help="Output PrismCast M3U")
     ap.add_argument("--server-url", default=os.getenv("SERVER_URL", "http://192.168.86.72:6655"), help="Base URL for lane streams")
     ap.add_argument("--epg-prefix", default="lane.", help="Prefix for channel IDs")
     args = ap.parse_args()
     
     print(f"Using DB: {args.db}")
-    print(f"Lanes outputs: {args.xml}, {args.m3u}, {args.chrome_m3u}, {args.ch4c_m3u}")
+    print(f"Lanes outputs: {args.xml}, {args.m3u}, {args.chrome_m3u}, {args.ch4c_m3u}, {args.pcast_m3u}")
     print(f"Server URL: {args.server_url}")
     print(f"Chrome Capture: {os.getenv('CC_SERVER', 'localhost')}:{os.getenv('CC_PORT', '8080')}")
-    print(f"Channels4Chrome: {os.getenv('CH4C_SERVER', 'localhost')}:{os.getenv('CH4C_PORT', '8080')}\n")
+    print(f"Channels4Chrome: {os.getenv('CH4C_SERVER', 'localhost')}:{os.getenv('CH4C_PORT', '8080')}")
+    print(f"PrismCast: {os.getenv('PCAST_SERVER', 'localhost')}:{os.getenv('PCAST_PORT', '5589')}\n")
     
     conn = get_conn(args.db)
     
@@ -411,6 +455,7 @@ def main():
     build_lanes_m3u(conn, args.m3u, args.server_url, epg_prefix=args.epg_prefix)
     build_chrome_m3u(conn, args.chrome_m3u, args.server_url, epg_prefix=args.epg_prefix)
     build_ch4c_m3u(conn, args.ch4c_m3u, args.server_url, epg_prefix=args.epg_prefix)
+    build_prismcast_m3u(conn, args.pcast_m3u, args.server_url, epg_prefix=args.epg_prefix)
     
     conn.close()
     print("\nLanes export complete!")

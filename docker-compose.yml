@@ -22,6 +22,11 @@ services:
       # CH4C_PORT   = port Channels4Chrome listens on (often 8080)
       - CH4C_SERVER=${CH4C_SERVER:-localhost}
       - CH4C_PORT=${CH4C_PORT:-8080}
+      # PrismCast (BETA)
+      # PCAST_SERVER = host/IP where PrismCast is running
+      # PCAST_PORT   = port PrismCast listens on (often 5589)
+      - PCAST_SERVER=${PCAST_SERVER:-localhost}
+      - PCAST_PORT=${PCAST_PORT:-5589}
       # Channels DVR integration (optional)
       - CHANNELS_DVR_IP=${CHANNELS_DVR_IP:-}
       - CHANNELS_SOURCE_NAME=${CHANNELS_SOURCE_NAME:-fruitdeeplinks}
