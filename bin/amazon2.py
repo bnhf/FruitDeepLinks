@@ -49,6 +49,8 @@ BENEFIT_MAP: Dict[str, Tuple[str, str]] = {
     "vixus": ("ViX", "aiv_vix"),
     "tennischannelus": ("Tennis Channel", "aiv_tennis_channel"),
     "FSNOHIFSOH3": ("FanDuel Sports Network", "aiv_fanduel"),
+    # Subscriber Product IDs (SPIDs) - Amazon's internal subscription identifiers
+    "amzn1.dv.spid.8cc2a36e-cd1b-d2cb-0e3b-b9ddce868f1d": ("FOX One", "aiv_fox_one"),
     # Channel UUIDs (when benefit_id returns the channel instead of short benefit ID)
     "amzn1.dv.channel.7a36cb2b-40e6-40c7-809f-a6cf9b9f0859": ("NBA League Pass", "aiv_nba_league_pass"),
 }
