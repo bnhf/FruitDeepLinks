@@ -295,7 +295,7 @@ def extract_gtis(
                 cur = conn.execute(
                     "SELECT gti FROM amazon_channels "
                     "WHERE last_updated_utc IS NOT NULL "
-                    "AND datetime(last_updated_utc) >= datetime('now', ?) "
+                    "AND datetime(replace(last_updated_utc, 'Z', '')) >= datetime('now', ?) "
                     "AND (is_stale IS NULL OR is_stale = 0)",
                     (cutoff_mod,),
                 )
@@ -435,13 +435,33 @@ async def scrape_one(playwright, browser, gti: str, timeout_ms: int, retries: in
             resp = await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             resp_status = resp.status if resp else 0
 
+            # Wait for network to be idle (no pending requests) to avoid "page is navigating" errors
+            try:
+                await page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                # If networkidle times out, continue anyway - we have domcontentloaded
+                pass
+
             # light wait for client-rendered data without requiring full load
             try:
                 await page.wait_for_timeout(250)
             except Exception:
                 pass
 
-            html = await page.content()
+            # Fetch page content with retry for transient navigation errors
+            html = ""
+            for content_attempt in range(3):
+                try:
+                    html = await page.content()
+                    break
+                except Exception as e:
+                    if content_attempt < 2 and "navigating and changing" in str(e):
+                        # Transient navigation error - retry after brief wait
+                        await page.wait_for_timeout(500)
+                        continue
+                    else:
+                        # Real error or last attempt
+                        raise
             benefit_id = _parse_benefit_id(html)
 
             entitlement = await _extract_entitlement_text(page)
