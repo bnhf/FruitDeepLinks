@@ -92,7 +92,8 @@ SERVICE_DISPLAY_NAMES = {
     'aiv_nba_league_pass': 'Amazon - NBA League Pass',
     'aiv_peacock': 'Amazon - Peacock',
     'aiv_dazn': 'Amazon - DAZN',
-    'aiv_fox': 'Amazon - FOX One',
+    'aiv_fox': 'Amazon - FOX One',       # legacy code (some playables rows)
+    'aiv_fox_one': 'Amazon - FOX One',   # canonical code (UI/filter standard)
     'aiv_vix_premium': 'Amazon - ViX Premium',
     'aiv_vix': 'Amazon - ViX',
     'aiv_tennis_channel': 'Amazon - Tennis Channel',
@@ -450,7 +451,8 @@ def get_logical_service_priority(service_code: str) -> int:
         'cbstve': 7,
         'nbcsportstve': 8,
         'foxone': 9,
-        'aiv_fox': 9,                # FOX on Amazon - same as direct
+        'aiv_fox': 9,                # FOX on Amazon - legacy code
+        'aiv_fox_one': 9,            # FOX on Amazon - canonical code
         'fsapp': 10,
         
         # Apple services

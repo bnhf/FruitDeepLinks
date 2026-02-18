@@ -392,6 +392,16 @@ def get_filtered_playables(
             if not amazon_master_enabled and playable["logical_service"].startswith("aiv"):
                 continue
 
+            # Normalize legacy logical_service aliases so they match what the UI/prefs store.
+            # e.g. old playables may have 'aiv_fox' while the filter UI saves 'aiv_fox_one'.
+            _LS_ALIASES: Dict[str, str] = {
+                "aiv_fox": "aiv_fox_one",
+            }
+            raw_ls = playable["logical_service"]
+            canonical_ls = _LS_ALIASES.get(raw_ls, raw_ls)
+            if canonical_ls != raw_ls:
+                playable["logical_service"] = canonical_ls  # normalize for downstream use
+
             # Filter by enabled services
             if enabled_services:  # If list not empty, filter
                 if playable["logical_service"] in enabled_services:
@@ -579,6 +589,66 @@ def get_best_deeplink_for_event(
             pass  # Fall back to Apple's deeplink if ESPN processing fails
     
     return deeplink
+
+
+def expand_enabled_services_for_amazon(
+    conn: sqlite3.Connection, enabled_services: List[str]
+) -> List[str]:
+    """Expand 'aiv' wildcard to include all aiv_* logical services in the database.
+
+    Historically we stored a single 'aiv' master toggle in enabled_services,
+    but playables use sub-service schemes like 'aiv_aggregator', 'aiv_vix_premium', etc.
+    Treating 'aiv' as enabling all aiv_* schemes preserves backward compatibility
+    so existing filter configs don't silently drop all Amazon events.
+
+    Legacy DB aliases (e.g. 'aiv_fox') are mapped to their canonical form ('aiv_fox_one')
+    so that disabling the canonical in the UI correctly excludes the aliased playables.
+    The actual alias normalization at filter-check time is done in get_filtered_playables.
+
+    Args:
+        conn: Database connection
+        enabled_services: List of enabled service codes from user preferences
+
+    Returns:
+        Expanded list with all matching aiv_* services added when 'aiv' is present
+    """
+    # Map legacy DB logical_service values -> canonical UI filter codes.
+    # get_filtered_playables normalizes these aliases at check time,
+    # so only the canonical form needs to be in the enabled set.
+    _ALIASES: Dict[str, str] = {
+        "aiv_fox": "aiv_fox_one",   # legacy code still present in some playables rows
+    }
+
+    try:
+        if not enabled_services or "aiv" not in enabled_services:
+            return enabled_services
+
+        expanded = set(enabled_services)
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT logical_service
+            FROM playables
+            WHERE provider='aiv'
+              AND logical_service IS NOT NULL
+              AND logical_service LIKE 'aiv_%'
+            """
+        )
+        for (ls,) in cur.fetchall():
+            if not ls:
+                continue
+            # Only add canonical form - alias normalization happens at filter time
+            canonical = _ALIASES.get(ls, ls)
+            expanded.add(canonical)
+
+        # Ensure the aggregator bucket is always covered
+        expanded.add("aiv_aggregator")
+
+        return sorted(expanded)
+    except Exception:
+        # Fail safe: never break export on expansion issues
+        return enabled_services
 
 
 def get_fallback_deeplink(event: Dict[str, Any]) -> Optional[str]:

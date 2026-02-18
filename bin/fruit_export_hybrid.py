@@ -32,6 +32,7 @@ try:
         should_include_event,
         get_best_deeplink_for_event,
         get_fallback_deeplink,
+        expand_enabled_services_for_amazon,
     )
 
     FILTERING_AVAILABLE = True
@@ -50,6 +51,9 @@ except ImportError:
 
     def get_fallback_deeplink(event):
         return None
+
+    def expand_enabled_services_for_amazon(conn, enabled_services):
+        return enabled_services
 
 
 # Import shared XMLTV helpers
@@ -313,6 +317,8 @@ def get_direct_events(
                 service_counts = get_all_logical_services_with_counts(conn)
                 all_services = sorted(service_counts.keys())
                 enabled_services = preferences.get("enabled_services", [])
+                # Expand 'aiv' and normalize aliases so display matches what filtering uses
+                enabled_services = expand_enabled_services_for_amazon(conn, enabled_services)
                 if enabled_services:
                     disabled_services = [s for s in all_services if s not in enabled_services]
                 else:
@@ -372,8 +378,9 @@ def build_direct_xmltv(
     # Load user preferences for deeplink selection
     preferences = load_user_preferences(conn) if FILTERING_AVAILABLE else {}
     
-    # Filter out deprecated services
+    # Filter out deprecated services and expand 'aiv' -> all aiv_* sub-services
     enabled_services = filter_deprecated_services(preferences.get("enabled_services", []))
+    enabled_services = expand_enabled_services_for_amazon(conn, enabled_services)
     
     priority_map = preferences.get("service_priorities", {})
     amazon_penalty = preferences.get("amazon_penalty", True)
@@ -582,8 +589,9 @@ def build_direct_m3u(
 
     preferences = load_user_preferences(conn) if FILTERING_AVAILABLE else {}
     
-    # Filter out deprecated services
+    # Filter out deprecated services and expand 'aiv' -> all aiv_* sub-services
     enabled_services = filter_deprecated_services(preferences.get("enabled_services", []))
+    enabled_services = expand_enabled_services_for_amazon(conn, enabled_services)
     
     priority_map = preferences.get("service_priorities", {})
     amazon_penalty = preferences.get("amazon_penalty", True)

@@ -197,40 +197,10 @@ def get_db_connection():
 
 
 def _expand_enabled_services_for_amazon(conn: sqlite3.Connection, enabled_services: list) -> list:
-    """Expand enabled services for Amazon wildcard behavior.
-
-    Historically we stored a single 'aiv' master toggle in enabled_services.
-    But playables use sub-service schemes like 'aiv_aggregator', 'aiv_vix_premium', etc.
-
-    To keep backward compatibility, treat 'aiv' as enabling all 'aiv_*' schemes
-    that exist in the database.
-    """
+    """Delegate to the shared expand_enabled_services_for_amazon in filter_integration."""
     try:
-        if not enabled_services or "aiv" not in enabled_services:
-            return enabled_services
-
-        expanded = set(enabled_services)
-
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT DISTINCT logical_service
-            FROM playables
-            WHERE provider='aiv'
-              AND logical_service IS NOT NULL
-              AND logical_service LIKE 'aiv_%'
-            """
-        )
-        for (ls,) in cur.fetchall():
-            if ls:
-                expanded.add(ls)
-
-        # Ensure the aggregator bucket is covered if present historically
-        expanded.add("aiv_aggregator")
-
-        return sorted(expanded)
+        return expand_enabled_services_for_amazon(conn, enabled_services)
     except Exception:
-        # Fail safe: never break selection on expansion issues
         return enabled_services
 
 
@@ -374,6 +344,17 @@ def save_user_preferences(prefs):
     conn = get_db_connection()
     if not conn:
         return False
+
+    # Normalize legacy logical_service aliases in enabled_services before saving.
+    # This ensures stale DB codes (e.g. 'aiv_fox') never get persisted into preferences;
+    # the canonical UI code ('aiv_fox_one') is saved instead.
+    _SAVE_ALIASES = {
+        "aiv_fox": "aiv_fox_one",
+    }
+    if "enabled_services" in prefs and prefs["enabled_services"]:
+        prefs["enabled_services"] = [
+            _SAVE_ALIASES.get(s, s) for s in prefs["enabled_services"]
+        ]
 
     try:
         cur = conn.cursor()
@@ -685,6 +666,7 @@ try:
         should_include_event,
         get_best_deeplink_for_event,
         get_fallback_deeplink,
+        expand_enabled_services_for_amazon,
     )
     FILTERING_AVAILABLE = True
 except ImportError:
@@ -701,6 +683,9 @@ except ImportError:
 
     def get_fallback_deeplink(event):
         return None
+
+    def expand_enabled_services_for_amazon(conn, enabled_services):
+        return enabled_services
 
 
 def get_event_link_columns(conn):
