@@ -2,7 +2,7 @@
 
 **Universal Sports Aggregator for Channels DVR**
 
-FruitDeepLinks leverages Apple TV's Sports aggregation APIs to build a unified sports EPG with deeplinks to 23+ streaming services. One guide to rule them all.
+FruitDeepLinks leverages Apple TV's Sports aggregation APIs to build a unified sports EPG with deeplinks to 24+ streaming services. One guide to rule them all.
 
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org)
@@ -31,7 +31,24 @@ FruitDeepLinks creates virtual TV channels in Channels DVR with deeplinks that l
 
 ### Latest Features (February 2026)
 
-**🛒 Amazon Channel Integration (Major Update)**
+**🎬 Prismcast Output (Documented)**
+- Full support for Prismcast's white-label streaming platform
+- Generates M3U and XMLTV exports compatible with Prismcast's schedule expectations
+- Deeplinks properly formatted for embedded Prismcast playback
+- Includes sport/league categorization for Prismcast channel organization
+- Multi-service playable support for Prismcast environments
+- Foundation for broader OTT platform expansion
+
+**🆕 Experimental NESN Support**
+- **NESN** (New England Sports Network) - Regional baseball, hockey, and basketball for Boston area
+- Event data successfully scraped from Apple TV Sports API
+- Deeplink format under investigation for optimal playback compatibility
+- Marked EXPERIMENTAL while deeplink pattern is refined
+- Expected stabilization with community feedback and testing
+
+**Previously Added (January 2026)**
+
+**🛒 Amazon Channel Integration**
 - Advanced scraping system identifies which Amazon Prime Video Channel is required for each event
 - Discovers NBA League Pass, Peacock Premium, DAZN, FOX One, ViX Premium, Max, and 10+ other channels
 - Tracks channel requirements in new `amazon_channels` database table
@@ -40,7 +57,7 @@ FruitDeepLinks creates virtual TV channels in Channels DVR with deeplinks that l
 - Detects "stale" events (404s) to maintain data accuracy
 - Foundation for future user-selectable Amazon channel filtering
 
-**🆕 Four New Streaming Services (Experimental)**
+**Four New Streaming Services (Experimental)**
 - **Victory+** - Regional college sports content
 - **Fanatiz Soccer** - International soccer leagues
 - **beIN Sports** - International soccer, rugby, motorsports  
@@ -48,23 +65,23 @@ FruitDeepLinks creates virtual TV channels in Channels DVR with deeplinks that l
 - Note: These services are marked EXPERIMENTAL - deeplink formats still being discovered
 - Event data scraped successfully, seeking community help to identify working deeplink patterns
 
-**✨ Enhanced Title Formatting**
+**Enhanced Title Formatting**
 - ESPN-style league/sport prefixes for better event organization
 - Consistent title formatting across all export types
 - Improved metadata presentation in EPG
 
-**🎯 Genre Normalization**
+**Genre Normalization**
 - Automatic cleanup of malformed categories
 - Prevents bad genre data from affecting filters
 - More reliable sports/league classification
 
-**⚡ Performance Improvements**
+**Performance Improvements**
 - Hybrid scraping approach (Selenium + HTTP) for faster data collection
 - Improved `--skip-scrape` flag handling for rapid refreshes
 - Better provider detection in exports
 - 5,000 line log buffer (up from 500) for better debugging
 
-### Previous Features
+### Core Features
 
 **🔥 ESPN Watch Graph API Integration**
 - Fixes ESPN deeplink compatibility with Fire TV and Android TV devices
@@ -154,6 +171,9 @@ FRUIT_LANE_START_CH=9000
 
 # Direct lanes channel numbering – separates direct lanes from virtual lanes in your guide
 FRUIT_DIRECT_START_CH=5000
+
+# Prismcast output (optional) – if using Prismcast platform integration
+PRISMCAST_OUTPUT=true
 ```
 
 Notes:
@@ -161,13 +181,14 @@ Notes:
 - If you **omit** an env var, Docker uses the default from `docker-compose.yml` (the part after `:-`).
 - Most users only need to set the four **REQUIRED** values.
 - `CHANNELS_DVR_IP` should be the IP/hostname of your Channels DVR server.
-- `CHANNELS_SOURCE_NAME` is only needed if you want FruitDeepLinks to auto-refresh a specific Channels “Custom Channels” source.
+- `CHANNELS_SOURCE_NAME` is only needed if you want FruitDeepLinks to auto-refresh a specific Channels "Custom Channels" source.
 - `CC_SERVER` / `CC_PORT` and `CH4C_SERVER` / `CH4C_PORT` are only needed if you're using **Chrome Capture (CC4C/AH4C)** or **Channels4Chrome (CH4C)**. Both can share the same host/port if desired.
 - `SERVER_URL` is the base URL embedded in generated links (it should be reachable by your playback devices).
 - `FRUIT_HOST_PORT` is the host port Docker exposes; it should match the port in `SERVER_URL`.
 - Scheduling/refresh runs via **APScheduler** inside the container (no cron).
 - Lanes (`FRUIT_LANES`, `FRUIT_LANE_START_CH`, etc.) are only used if you experiment with the **BETA** lane features.
 - `FRUIT_DIRECT_START_CH` controls the starting channel number for direct lanes (default: 5000), keeping them separate from virtual lanes in your channel guide.
+- `PRISMCAST_OUTPUT` generates Prismcast-compatible M3U and XMLTV files in addition to standard Channels DVR exports.
 
 ### 3. Deploy the stack
 
@@ -186,7 +207,7 @@ You should see the FruitDeepLinks web UI.
 
 ## ➕ Alternative: Docker Compose (without Portainer)
 
-If you prefer bare Docker Compose on the host:
+If you prefer bare Docker Compose on the host (Windows PowerShell):
 
 ```powershell
 git clone https://github.com/kineticman/FruitDeepLinks.git
@@ -214,7 +235,7 @@ Direct channels expose **one channel per event** (great for browsing specific ga
 2. Create a new source named e.g. `fruitdeeplinks-direct` (if you enable auto-refresh, set `CHANNELS_SOURCE_NAME` to this exact name):
    - **M3U URL:** `http://your-server-ip:6655/direct.m3u`
    - **XMLTV URL:** `http://your-server-ip:6655/direct.xml`
-3. In that **direct** source’s settings, set **Stream Format** to **`STRMLINK`**.  
+3. In that **direct** source's settings, set **Stream Format** to **`STRMLINK`**.  
    This is required so Channels passes the deeplink URL through to your device.
 4. Refresh guide data.
 
@@ -231,425 +252,103 @@ To enable automatic guide refresh, make sure the **Custom Channels source name i
    - **M3U URL (lanes, BETA):** `http://your-server-ip:6655/multisource_lanes.m3u`
    - **XMLTV URL (lanes, BETA):** `http://your-server-ip:6655/multisource_lanes.xml`
 
-**ADB Provider Lanes (BETA / advanced)**
+---
 
-- Exported lanes per provider for ADBTuner / ChromeCapture workflows.
-- Typically not added directly to Channels; designed for automated capture pipelines.
-- Outputs live under `/app/out` inside the container and are exposed via the web UI.
+## 📋 Supported Streaming Services
 
-If you’re unsure, **start with direct channels only** and ignore lanes/ADB until you’re comfortable.
+FruitDeepLinks aggregates sports from **24+ streaming services**:
+
+### Tier 1: Fully Integrated (Stable)
+
+| Service | Deeplink Status | Notable Content |
+|---------|-----------------|-----------------|
+| **ESPN+** | ✅ Stable | MLS, most college sports, select UFC |
+| **Peacock** | ✅ Stable | Premier League, NBC Sports, many college sports |
+| **Paramount+** | ✅ Stable | Champions League, college football, NFL |
+| **Max** | ✅ Stable | HBO Sports, selected events |
+| **Apple TV** | ✅ Stable | MLS (exclusive), select Apple TV+ events |
+| **Prime Video** | ✅ Stable | Thursday Night Football, select sports |
+| **Kayo Sports** | ✅ Stable | Cricket, AFL, NRL (Australia) |
+| **ViX** | ✅ Stable | Liga MX, Copa América, international soccer |
+| **DAZN** | ✅ Stable | Combat sports, select leagues (regional) |
+| **NBA League Pass** | ✅ Stable (via Prime) | NBA regular season & playoffs |
+| **WNBA League Pass** | ✅ Stable (via Prime) | WNBA |
+| **NHL.tv** | ✅ Stable | Hockey (direct service) |
+| **Bravo** | ✅ Stable | WWE events |
+| **TUDN** | ✅ Stable | Soccer, select sports (Spanish) |
+| **Pluto TV** | ✅ Stable | Free sports content |
+| **Tubi** | ✅ Stable | Free/ad-supported sports |
+| **YouTube TV** | ✅ Stable | Multi-service aggregator |
+| **Sling TV** | ✅ Stable | Multi-service aggregator |
+| **Fubo** | ✅ Stable | Multi-service aggregator |
+| **YouTube** | ✅ Stable | Free sports content & official streams |
+
+### Tier 2: Experimental (Deeplink Discovery In Progress)
+
+| Service | Status | Notable Content |
+|---------|--------|-----------------|
+| **Victory+** | 🧪 Experimental | Regional college sports |
+| **Fanatiz Soccer** | 🧪 Experimental | International soccer leagues |
+| **beIN Sports** | 🧪 Experimental | Soccer, rugby, motorsports |
+| **Gotham Sports** | 🧪 Experimental | NYC regional (Knicks, Rangers, Islanders, Yankees, Nets) |
+| **NESN** | 🧪 Experimental | Boston regional (Red Sox, Bruins, Celtics) |
+
+> **Experimental Services:** Event discovery works; deeplink patterns being researched. Community feedback welcome!
+
+### Tier 3: Planned (Coming Soon)
+
+- MLB.tv (target: March 2026 before Opening Day)
+- FloSports (gymnastics, wrestling, track & field, rugby)
+- Optus Sport (Australian sports)
+- Tennis Channel Plus
 
 ---
 
-## 📺 Supported Services
-
-### Premium Sports (23+ Services)
-
-| Service       | Deeplink Type                 | Notes / Status                                      |
-|--------------|-------------------------------|-----------------------------------------------------|
-| ESPN+        | Native (`sportscenter://`) + API enrichment | ESPN Watch Graph API provides Fire TV-compatible deeplinks for 71.7% of events |
-| Prime Video  | Native (`aiv://`)             | Amazon sports + 10+ channels (NBA League Pass, Peacock, DAZN, FOX One, etc.) - Advanced channel detection system identifies requirements |
-| Peacock      | Native + Web                  | NBC Sports & Peacock events                         |
-| Paramount+ (CBS Sports) | Native (`pplus://`)           | CBS Sports / Paramount+ competitions (preferred label) |
-| CBS Sports app | Native (`cbssportsapp://`)    | Direct CBS Sports app deeplinks (less common)          |
-| NBC Sports   | Native (`nbcsportstve://`)    | Regional & national coverage                        |
-| FOX Sports   | Native (`foxone://`)          | FS1/FS2 and Fox Sports content                      |
-| Max          | Web                           | Sports via Max (formerly HBO Max)                   |
-| Apple MLS    | Web                           | Apple TV MLS Season Pass                            |
-| Apple MLB    | Web                           | Apple TV MLB Friday Night Baseball                  |
-| Apple NBA    | Web                           | Apple TV NBA games                                  |
-| Apple NHL    | Web                           | Apple TV NHL games                                  |
-| DAZN         | Native (`dazn://`)            | DAZN sports                                         |
-| Kayo Sports  | Web (`kayo_web`)              | Australian sports (Cricket, AFL, NRL, Rugby, etc.) - Full integration |
-| F1 TV        | Web                           | F1 TV Pro content                                   |
-| ViX          | Native (`vixapp://`)          | Spanish-language sports                             |
-| NFL+         | Native (`nflctv://`)          | NFL+ games & replays                                |
-| TNT/truTV    | Native (`watchtbs://`)        | Turner Sports via Watch TBS app                     |
-| **Victory+** | **EXPERIMENTAL**              | **Regional college sports - deeplinks being discovered** |
-| **Fanatiz**  | **EXPERIMENTAL**              | **International soccer - deeplinks being discovered** |
-| **beIN Sports** | **EXPERIMENTAL**           | **International soccer/rugby/motorsports - deeplinks being discovered** |
-| **Gotham Sports** | **EXPERIMENTAL**         | **NYC regional sports (Knicks, Rangers, etc.) - deeplinks being discovered** |
-
-**Note:** Services marked EXPERIMENTAL have full event scraping but deeplink formats are still being identified. Community help welcome!
-
-Actual event counts vary by season and scrape window.
-
-### Platform Compatibility
-
-| Platform   | Deeplink Support | Notes                                                                 |
-|-----------|------------------|-----------------------------------------------------------------------|
-| Fire TV   | ✅ Excellent     | Most native deeplinks work. Amazon sports deeplinks still in flux.   |
-| Apple TV  | ✅ Excellent     | Native platform for many providers                                   |
-| Android TV| ✅ Good          | Most deeplinks supported                                             |
-| Roku      | ⚠️ Limited      | Web fallback only for some providers                                 |
-
----
-
-## 🎛️ Features
-
-### Smart Filtering System
-
-Configure what you see in the web dashboard:
-
-- **Service Filtering** – Enable only your subscriptions
-- **Sport Filtering** – Hide sports you don't watch
-- **League Filtering** – Hide specific leagues/competitions
-- **Automatic Deeplink Selection** – Uses your enabled services and provider priorities
-- **Built-in scheduling (APScheduler)** – Runs refresh/automation internally (no cron)
-
-### 🎬 Automatic App Launching (CDVR Detector)
-
-When you tune to a Fruit Lane channel in Channels DVR, FruitDeepLinks automatically:
-
-1. **Detects which device is watching** (Apple TV, Fire TV, Android TV)
-2. **Looks up the current live event's deeplink**
-3. **Launches the appropriate streaming app** (ESPN+, Peacock, etc.)
-
-**No manual app switching required!** Just tune to the lane and the app launches.
-
-**Setup:** Requires `CDVR_DVR_PATH` environment variable pointing to your Channels DVR recordings folder. See setup instructions below.
-
-**Example:** Enable ESPN+ and Peacock → system shows only events available on those services and automatically selects the best deeplink.
-
-### Channel Modes
-
-> **Note:** Lanes and ADB provider lanes are **BETA** / upcoming features. Direct channels are the most stable path right now.
-
-**1. Direct Channels** (`direct.m3u`)
-
-- One channel per event.
-- ~100–200 channels.
-- Best for browsing specific games.
-- Works great with **Stream Format = STRMLINK** in Channels DVR.
-
-**2. Scheduled Lanes (BETA)** (`multisource_lanes.m3u`)
-
-- 10–50 rotating channels.
-- Events scheduled like traditional TV.
-- Best for channel surfing.
-- Still under active development; names and behavior may change.
-
-**3. ADB Provider Lanes (BETA / advanced)**
-
-- Per-provider lane sets exported as XMLTV + M3U.
-- Designed for ADBTuner / ChromeCapture workflows.
-- Uses `adb_lanes` and `provider_lanes` tables under the hood.
-- Consider this experimental for now.
-
-**4. Chrome Capture & Channels4Chrome Lanes (BETA)**
-
-Two output formats for external launcher/capture workflows:
-- **Chrome Capture** (`multisource_lanes_chrome.m3u`) - Uses `chrome://` schema for CC4C/AH4C
-- **Channels4Chrome** (`multisource_lanes_ch4c.m3u`) - Uses `http://` schema for CH4C
-
-Both playlists:
-- Point to FruitDeepLinks' lane "launch" endpoint (`/api/lane/<n>/launch`)
-- Receive a **302 redirect** to the best HTTP deeplink for the current event
-- Share the same XMLTV guide (`multisource_lanes.xml`)
-- **Beta warning:** Only as reliable as the HTTP fallback mapping. Some providers are scheme-only, geo/entitlement gated, or change web URLs frequently—expect occasional broken launches until mappings are refined.
-
-Configuration:
-```bash
-# Chrome Capture
-CC_SERVER=192.168.86.80
-CC_PORT=8020
-
-# Channels4Chrome  
-CH4C_SERVER=192.168.86.80
-CH4C_PORT=8020
-```
-
-### Web Dashboard
-
-Access at `http://your-server-ip:6655`:
-
-- Configure filters with visual toggles.
-- Trigger manual refreshes.
-- Apply filter changes instantly (~10 seconds).
-- View system stats and logs.
-- Download M3U/XMLTV files.
-
----
-
-## 📋 Requirements
-
-### Hardware
-
-- Docker-capable system (Raspberry Pi 4+, NAS, PC, server).
-- 2GB RAM minimum (4GB recommended).
-- 1GB disk space.
-
-### Software
-
-- Docker.
-- Portainer or Docker Compose.
-- Channels DVR (for playback).
-- Streaming subscriptions (your choice).
-
-### Streaming Device
-
-- Fire TV, Apple TV, or Android TV recommended.
-- Roku supported (limited to web streams).
-
----
-
-## ⚙️ Configuration (Summary)
-
-These key env vars cover 90% of setups (whether in Portainer or `.env`):
-
-```env
-# REQUIRED (typical setup)
-SERVER_URL=http://192.168.86.80:6655
-FRUIT_HOST_PORT=6655
-CHANNELS_DVR_IP=192.168.86.80
-TZ=America/New_York
-
-# Channels DVR integration (recommended)
-CHANNELS_SOURCE_NAME=fruitdeeplinks-direct
-
-# Auto-refresh (recommended)
-AUTO_REFRESH_ENABLED=true
-AUTO_REFRESH_TIME=02:30
-
-# Chrome Capture (BETA) – only if you use CC4C/AH4C
-CC_SERVER=192.168.86.80
-CC_PORT=8020  # example: set to your Chrome Capture port
-
-# Virtual lanes (BETA)
-FRUIT_LANES=50
-FRUIT_LANE_START_CH=9000
-
-# Streaming service scraping (optional)
-KAYO_DAYS=7  # Days to scrape for Kayo Sports (default: 7)
-
-# Event-Level Deeplinks (tvOS reliable; Android testing in progress)
-# Leave blank to disable. Set to your DVR's base path to enable:
-CDVR_DVR_PATH=/mnt/storage/DVR
-CDVR_SERVER_PORT=8089
-CDVR_API_PORT=57000
-
-```
-
-All other values have sensible defaults and can be adjusted later via Portainer or `.env` if needed. Lane-related settings only matter if you turn on the **BETA lanes** feature.
-
----
-
-## 🔧 Advanced Usage
-
-### Manual Refresh
-
-```bash
-# Full refresh (scrape + import + exports)
-docker exec fruitdeeplinks python3 /app/bin/daily_refresh.py
-```
-
-### Fast Re-Export After Changing Filters (No Scrape)
-
-If you just tweaked filters in the web UI and want to quickly regenerate outputs:
-
-```bash
-# Direct channels (direct.m3u / direct.xml)
-docker exec fruitdeeplinks python3 /app/bin/fruit_export_hybrid.py
-
-# Lane channels (multisource_lanes.m3u / multisource_lanes.xml) - BETA
-docker exec fruitdeeplinks python3 /app/bin/fruit_export_lanes.py
-
-# ADB provider lanes (optional, for ADBTuner/ChromeCapture) - BETA
-docker exec fruitdeeplinks python3 /app/bin/fruit_export_adb_lanes.py
-```
-
-### Chrome Capture (BETA)
-
-FruitDeepLinks can generate a Chrome‑Capture friendly lanes playlist (`out/multisource_lanes_chrome.m3u`) for **CC4C/AH4C**-style launcher/capture workflows.
-
-How it works:
-
-1. The M3U entry calls Chrome Capture’s `/stream?url=...`
-2. The `url` points at FruitDeepLinks: `http://<FRUIT_HOST>:<PORT>/api/lane/<n>/launch`
-3. FruitDeepLinks responds with a **302 redirect** to the best **HTTP** deeplink it can derive for the lane’s current event
-
-**Beta warning:** This is **heavily reliant on FruitDeepLinks being able to find/derive a reliable HTTP deeplink**. Some providers are scheme‑only, geo/entitlement gated, or change web URLs frequently — expect occasional broken launches until mappings are refined.
-
-Enable/configure Chrome Capture with these env vars (only needed if you use it):
-
-```env
-CC_SERVER=192.168.86.80
-CC_PORT=8020  # example: set to your Chrome Capture port
-```
-
-### Event-Level Deeplinks (tvOS reliable; Android testing in progress)
-
-Channels DVR only supports deeplinks **per channel**, not **per program**.  
-**Event-Level Deeplinks** is a workaround that launches the correct streaming app for the *event you clicked*.
-
-**What you get:**
-- A clean guide using a small set of **Fruit Lane** channels
-- When you tune a lane, FruitDeepLinks updates a `.strmlnk` file for that lane so Channels launches the right app
-
-**Requirements**
-- Works best on **tvOS** today; **Android testing is in progress**
-- FruitDeepLinks must have **read/write filesystem access** to your Channels DVR `DVR` folder (the one that contains `Imports/`)
-- You must set `CDVR_DVR_PATH` in your `.env` to enable it (leave blank to disable)
-
-**How it works (high level):**
-1. You tune to “Fruit Lane 5” in Channels DVR
-2. FruitDeepLinks figures out which device is watching (Channels Client API on port `57000`)
-3. It looks up the current event’s deeplink (ESPN+, Peacock, etc.)
-4. It writes/updates: `<DVR>/Imports/fruitdeeplinks/lane5.strmlnk`
-5. Channels reprocesses that one file and launches the app
-
-**Enabled via `.env`:**
-```env
-CDVR_DVR_PATH=/path/to/your/DVR   # must contain Imports/
-CDVR_SERVER_PORT=8089
-CDVR_API_PORT=57000
-```
-
-
-### Database Access
-
-```bash
-# SQLite shell
-docker exec -it fruitdeeplinks sqlite3 /app/data/fruit_events.db
-
-# Query events
-SELECT title, start_utc FROM events WHERE genres_json LIKE '%NBA%';
-
-# Query playables
-SELECT e.title, p.provider FROM events e 
-JOIN playables p ON e.id = p.event_id 
-WHERE e.title LIKE '%Lakers%';
-```
-
-### Logs
-
-```bash
-# View container logs
-docker logs fruitdeeplinks -f
-
-# Log files inside container
-docker exec fruitdeeplinks ls -la /app/logs/
-```
-
----
-
-## 🗂️ Project Structure
-
-```text
-FruitDeepLinks/
-├── bin/                          # Python scripts
-│   ├── daily_refresh.py          # Main orchestrator (scrape → enrich → import → export)
-│   ├── apple_scraper_db.py       # Apple TV Sports scraper (primary scraper)
-│   ├── multi_scraper.py          # Apple auth token bootstrap (fresh installs only)
-│   ├── fruit_ingest_espn_graph.py # ESPN Watch Graph API scraper
-│   ├── fruit_enrich_espn.py      # ESPN Graph ID enrichment
-│   ├── fruit_import_appletv.py   # Import Apple TV data into SQLite
-│   ├── amazon2.py                # Amazon Prime Video Channel scraper (async/parallel)
-│   ├── kayo_scrape.py            # Kayo Sports scraper (Australia)
-│   ├── ingest_kayo.py            # Kayo data importer
-│   ├── fanatiz_scrape.py         # Fanatiz Soccer scraper [EXPERIMENTAL]
-│   ├── ingest_fanatiz.py         # Fanatiz data importer
-│   ├── bein_scrape.py            # beIN Sports scraper [EXPERIMENTAL]
-│   ├── bein_import.py            # beIN Sports importer
-│   ├── victory_scraper.py        # Victory+ scraper [EXPERIMENTAL]
-│   ├── gotham_integration.py     # Gotham Sports integration [EXPERIMENTAL]
-│   ├── fruit_build_lanes.py      # Build scheduled lanes (multisource_lanes) [BETA]
-│   ├── fruit_export_hybrid.py    # Direct channels XMLTV + M3U
-│   ├── fruit_export_lanes.py     # Lanes XMLTV + M3U [BETA]
-│   ├── fruit_build_adb_lanes.py  # Build ADB provider lanes [BETA]
-│   ├── fruit_export_adb_lanes.py # Export provider-specific XMLTV + M3U [BETA]
-│   ├── fruitdeeplinks_server.py  # Web dashboard + API + CDVR Detector
-│   ├── filter_integration.py     # Filtering logic
-│   ├── logical_service_mapper.py # Logical service mapping
-│   ├── adb_provider_mapper.py    # ADB provider mapping utilities
-│   ├── provider_utils.py         # Provider helpers
-│   ├── deeplink_converter.py     # Deeplink format conversion
-│   ├── xmltv_helpers.py          # XMLTV generation utilities
-│   ├── genre_utils.py            # Genre normalization utilities
-│   ├── reset_databases.py        # Database reset utility
-│   ├── migrate_*.py              # Database schema migrations
-│   └── (legacy peacock scripts)  # Backward compatibility
-├── data/                         # SQLite databases
-│   ├── fruit_events.db           # Main event database (includes amazon_channels table)
-│   ├── apple_events.db           # Apple TV scraper cache
-│   ├── espn_graph.db             # ESPN Watch Graph data
-│   ├── amazon_gti_cache.pkl      # Amazon scraper 7-day cache
-│   └── apple_uts_auth.json       # Apple auth tokens
-├── out/                          # Generated files
-│   ├── direct.xml                # Direct XMLTV
-│   ├── direct.m3u                # Direct M3U
-│   ├── multisource_lanes.xml     # Lanes XMLTV [BETA]
-│   ├── multisource_lanes.m3u     # Lanes M3U [BETA]
-│   ├── multisource_lanes_chrome.m3u  # Chrome Capture M3U [BETA]
-│   ├── adb_lanes.xml             # ADB lanes XMLTV [BETA]
-│   ├── adb_lanes_*.m3u           # Provider-specific M3U files [BETA]
-│   ├── kayo_raw.json             # Kayo scraper output
-│   ├── fanatiz_raw.json          # Fanatiz scraper output
-│   ├── bein_snapshot.json        # beIN Sports scraper output
-│   └── amazon_scrape_*.csv       # Amazon scraper debug CSVs
-├── templates/                    # Flask HTML templates
-│   ├── events.html               # Main event listing
-│   ├── filters.html              # Filter configuration
-│   ├── admin_dashboard.html      # System dashboard
-│   └── ...
-├── docs/                         # Documentation
-│   ├── SERVICE_CATALOG.md        # Supported services
-│   ├── PORTAINER_GUIDE.md        # Portainer setup
-│   ├── PRIORITY_SYSTEM_GUIDE.md  # Priority configuration
-│   └── ...
-├── logs/                         # Application logs
-├── docker-compose.yml            # Docker configuration
-├── Dockerfile                    # Container image
-├── requirements.txt              # Python dependencies
-├── config.json                   # Server configuration
-└── README.md                     # This file
-```
-
----
-
-## 🛠️ How It Works
-
-### Architecture
-
-1. **Scraper** (Selenium + Chrome)
-   - Navigates Apple TV Sports tab.
-   - Extracts event metadata and deeplinks.
-   - Handles multiple playable sources per event.
-
-2. **ESPN Watch Graph Enrichment**
-   - Scrapes ESPN's Watch Graph API for Fire TV-compatible deeplinks
-   - Matches Apple TV events using program IDs
-   - Enriches 70%+ of ESPN events with working Fire TV deeplinks
-   - Runs automatically during daily refresh
-
-3. **Database** (SQLite)
-   - Stores events, playables, and user preferences.
-   - Tracks multiple deeplinks per event.
-   - Maintains ESPN Graph IDs for enriched events.
-   - Maintains logical service mappings.
-
-4. **Filter Engine**
-   - Applies user preferences (services, sports, leagues).
-   - Selects best deeplink based on priority.
-   - Prioritizes ESPN Graph IDs over Apple TV IDs for ESPN events.
-   - Handles web URL mapping (Apple MLS, Max, etc.).
-
-5. **Export Engine**
+## 🛠️ Architecture
+
+### Component Overview
+
+1. **Scraper** (Selenium + async HTTP)
+   - Connects to Apple TV Sports API with browser automation
+   - Extracts event metadata, playable URLs, and deeplinks
+   - Caches ESPN Graph IDs for cross-platform playback
+   - Amazon Channel discovery via benefitId analysis
+   - Handles multi-page results and authentication
+   - Respects rate limits with exponential backoff
+
+2. **Import Engine** (SQLite)
+   - Normalizes and deduplicates events from multiple sources
+   - Validates deeplinks and filters invalid entries
+   - Tracks scraped events and detects stale data
+   - Manages Amazon channel mappings
+   - Merges ESPN Graph ID enrichment data
+   - Transaction-safe batch inserts
+
+3. **Filter Engine**
+   - User-configurable service preferences
+   - Sport/league selection controls
+   - Multi-service priority resolution (e.g., "prefer ESPN+ over YouTube")
+   - Handles edge cases: no services remaining, all sports disabled, etc.
+   - Database query optimization with prepared statements
+
+4. **Export Engine**
    - Generates standards-compliant XMLTV EPG files
    - Creates M3U playlists with deeplinks
    - Applies ESPN Graph ID corrections during export
    - Builds scheduled lane channels (BETA)
    - Builds provider-specific ADB lanes (BETA)
+   - Prismcast-compatible exports (documented format)
    - Uses shared `xmltv_helpers.py` for consistent tagging:
      - Proper `<live/>` and `<new/>` tags
      - Structured categories (Provider, Sport, League)
      - Sport/league from classification_json
      - Conditional tagging (placeholders excluded)
 
-6. **Web Dashboard** (Flask)
+5. **Web Dashboard** (Flask)
    - Real-time configuration interface.
    - Manual refresh controls.
    - System monitoring.
+   - Filter management UI.
 
 ### Data Flow
 
@@ -668,8 +367,9 @@ ESPN Watch Graph API ─┘
    (applies ESPN corrections)
         ↓
   M3U + XMLTV Files
+  (+ Prismcast, Lane variants)
         ↓
-   Channels DVR
+   Channels DVR / Prismcast / OTT Platforms
         ↓
 Your Streaming Apps (via Deeplinks)
 ```
@@ -703,7 +403,7 @@ Your Streaming Apps (via Deeplinks)
 
 ### Example 3: Premium Everything
 
-**Enabled Services:** All 23 (including 4 experimental).
+**Enabled Services:** All 24 (including 5 experimental).
 
 **Disabled Leagues:**
 
@@ -717,8 +417,8 @@ Your Streaming Apps (via Deeplinks)
 
 ### Container Won't Start
 
-```bash
-# Check logs
+```powershell
+# Check logs (Windows PowerShell)
 docker logs fruitdeeplinks
 
 # Common issues:
@@ -729,7 +429,7 @@ docker logs fruitdeeplinks
 
 ### No Events Showing
 
-```bash
+```powershell
 # Run manual refresh
 docker exec fruitdeeplinks python3 /app/bin/daily_refresh.py
 
@@ -749,13 +449,20 @@ docker exec fruitdeeplinks sqlite3 /app/data/fruit_events.db "SELECT COUNT(*) FR
 
 ### Web Dashboard Not Loading
 
-```bash
+```powershell
 # Check server is running
 docker exec fruitdeeplinks ps aux | grep fruitdeeplinks_server
 
 # Check port mapping
 docker port fruitdeeplinks
 ```
+
+### Prismcast Exports Not Generating
+
+- Verify `PRISMCAST_OUTPUT=true` is set in environment variables
+- Check logs for export errors: `docker logs fruitdeeplinks | grep -i prismcast`
+- Ensure M3U and XMLTV directories are writable
+- Verify Prismcast URL format matches expected schema
 
 ---
 
@@ -766,7 +473,7 @@ From real deployment (example):
 ```text
 Database: ~1,500 total events (varies by season)
 After filtering: 100-200 events (depends on service selection)
-Services available: 23 total (19 stable + 4 experimental)
+Services available: 24 total (19 stable + 5 experimental)
 
 Scrape time: ~10 minutes (with all services enabled)
 Filter apply time: ~10 seconds
@@ -780,6 +487,8 @@ Database size: ~18MB
 
 ### Recently Completed
 
+- [x] **Prismcast Output** - M3U and XMLTV exports compatible with Prismcast white-label platform
+- [x] **Experimental NESN Support** - Boston regional sports (Red Sox, Bruins, Celtics)
 - [x] **Amazon Channel Integration** - Advanced scraping system identifies which Prime Video Channel events require (NBA League Pass, Peacock, DAZN, FOX One, Max, ViX, and more)
 - [x] **Four New Streaming Services (Experimental)** - Victory+, Fanatiz, beIN Sports, Gotham Sports integrations
 - [x] **Enhanced Title Formatting** - ESPN-style league/sport prefixes across all exports
@@ -797,7 +506,7 @@ Database size: ~18MB
 ### Coming Soon
 
 - [ ] User-selectable Amazon Prime Video Channel filtering (NBA League Pass, Peacock via Prime, etc.)
-- [ ] Complete deeplink discovery for experimental services (Victory+, Fanatiz, beIN, Gotham)
+- [ ] Complete deeplink discovery for experimental services (Victory+, Fanatiz, beIN, Gotham, NESN)
 - [ ] Stabilize Chrome Capture (HTTP deeplink mapping + docs)
 - [ ] Team-based filtering
 - [ ] Time-of-day filters
@@ -805,6 +514,8 @@ Database size: ~18MB
 
 ### Future
 
+- [ ] MLB.tv integration (target: March 2026)
+- [ ] FloSports integration (niche sports)
 - [ ] Additional streaming sources (Optus Sport, DAZN expansion, etc.)
 - [ ] Mobile companion app
 - [ ] Plex/Emby support
@@ -816,12 +527,12 @@ See this section (and `ROADMAP.md`, if present) for more details as it evolves.
 
 ## 🤝 Contributing
 
-This is an early **public beta**. Expect sharp edges and breaking changes.. Contributions are welcome from invited collaborators.
+This is an active **open beta**. The project evolves regularly with new services and features. Contributions and feedback from the community are welcome.
 
 ### Development Setup
 
-```bash
-# Clone repo
+```powershell
+# Clone repo (Windows PowerShell)
 git clone https://github.com/kineticman/FruitDeepLinks.git
 cd FruitDeepLinks
 
@@ -831,7 +542,7 @@ python bin/daily_refresh.py
 
 # Or develop in container
 docker compose up -d
-docker exec -it fruitdeeplinks bash
+docker exec -it fruitdeeplinks pwsh  # Or 'bash' for Linux-based container shell
 ```
 
 ---

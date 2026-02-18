@@ -834,11 +834,11 @@ def main(argv=None):
     # Uses amazon2.py (Playwright) which is dramatically more stable than the legacy Selenium scraper.
     #
     # Defaults are horizon + cache (recommended):
-    #   python3 amazon2.py --db ... --horizon-hours 72 --past-hours 6 --rescrape-hours 48 --max 350 --workers 3 --timeout-ms 30000 --retries 1
+    #   python3 amazon2.py --db ... --horizon-hours 96 --past-hours 6 --rescrape-hours 48 --max 350 --workers 3 --timeout-ms 30000 --retries 1
     #
     # Env knobs (optional):
     #   AMAZON_MAX:               hard safety cap on GTIs to process (default 350; applied after horizon+cache)
-#   AMAZON_HORIZON_HOURS:     only consider events starting within next N hours (default 72)
+#   AMAZON_HORIZON_HOURS:     only consider events starting within next N hours (default 96)
 #   AMAZON_PAST_HOURS:        include events that ended within last N hours (default 6)
 #   AMAZON_RESCRAPE_HOURS:    skip GTIs scraped successfully within last N hours (default 48)
     #   AMAZON_WORKERS:     concurrency (default 3)
@@ -852,7 +852,7 @@ def main(argv=None):
         print("Amazon scraper skipped (--skip-scrape flag)")
     else:
         amazon_max = os.getenv("AMAZON_MAX", "350")  # safety cap (after horizon+cache)
-        amazon_horizon_hours = os.getenv("AMAZON_HORIZON_HOURS", "72")
+        amazon_horizon_hours = os.getenv("AMAZON_HORIZON_HOURS", "96")
         amazon_past_hours = os.getenv("AMAZON_PAST_HOURS", "6")
         amazon_rescrape_hours = os.getenv("AMAZON_RESCRAPE_HOURS", "48")
         amazon_workers = os.getenv("AMAZON_WORKERS", "3")
