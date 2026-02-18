@@ -2977,6 +2977,12 @@ def api_filters_clear_stale():
         if any(s.startswith("aiv") for s in active_services):
             active_services.add("aiv")
 
+        # If Amazon master toggle is OFF, treat all aiv* as inactive regardless
+        amazon_master_enabled = prefs.get("amazon_master_enabled", True)
+        if not amazon_master_enabled:
+            active_services = {s for s in active_services
+                               if s != "aiv" and not s.startswith("aiv_")}
+
         # Find stale: enabled but not in active services
         # Always keep 'aiv' master toggle if any Amazon sub-service is active
         stale = [s for s in enabled if s not in active_services]

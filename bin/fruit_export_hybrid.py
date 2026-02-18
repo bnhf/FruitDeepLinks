@@ -319,6 +319,12 @@ def get_direct_events(
                 enabled_services = preferences.get("enabled_services", [])
                 # Expand 'aiv' and normalize aliases so display matches what filtering uses
                 enabled_services = expand_enabled_services_for_amazon(conn, enabled_services)
+                # If Amazon master toggle is OFF, remove all aiv* from display
+                # (they're in enabled_services but blocked at filter time by master toggle)
+                amazon_master_enabled = preferences.get("amazon_master_enabled", True)
+                if not amazon_master_enabled:
+                    enabled_services = [s for s in enabled_services
+                                        if s != "aiv" and not s.startswith("aiv_")]
                 if enabled_services:
                     disabled_services = [s for s in all_services if s not in enabled_services]
                 else:
