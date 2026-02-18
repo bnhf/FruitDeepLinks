@@ -48,6 +48,7 @@ BENEFIT_MAP: Dict[str, Tuple[str, str]] = {
     "vixplusus": ("ViX Premium", "aiv_vix_premium"),
     "vixus": ("ViX", "aiv_vix"),
     "tennischannelus": ("Tennis Channel", "aiv_tennis_channel"),
+    "willowtv": ("Willow TV", "aiv_willow"),
     "FSNOHIFSOH3": ("FanDuel Sports Network", "aiv_fanduel"),
     # Subscriber Product IDs (SPIDs) - Amazon's internal subscription identifiers
     "amzn1.dv.spid.8cc2a36e-cd1b-d2cb-0e3b-b9ddce868f1d": ("FOX One", "aiv_fox_one"),
