@@ -246,13 +246,51 @@ def get_shelf_events_to_upgrade(conn: sqlite3.Connection, limit: int) -> List[st
     
     Returns:
     - All shelf events (incomplete data needs upgrade)
-    - Any event updated 23hrs-5days ago (might have new playables, but skip very old)
+    - Non-full events updated 23hrs-5days ago that may have new playables
+
+    Excludes:
+    - Events already at fetch_level='full' from the refresh window (they're done)
+    - Events already past their end_utc in fruit_events.db (Apple has likely expired them)
     """
     cur = conn.cursor()
+
+    # Try to attach fruit_events.db to filter out expired events
+    fruit_db = Path(str(cur.execute("PRAGMA database_list").fetchone()[2])).parent / "fruit_events.db"
+    has_fruit_db = fruit_db.exists()
+
+    if has_fruit_db:
+        try:
+            cur.execute(f"ATTACH DATABASE '{fruit_db}' AS fruit")
+            cur.execute("""
+                SELECT a.event_id FROM apple_events a
+                LEFT JOIN fruit.events e ON e.id = a.event_id
+                WHERE (
+                    a.fetch_level = 'shelf'
+                    OR (
+                        a.fetch_level != 'full'
+                        AND a.last_updated < datetime('now', '-23 hours')
+                        AND a.last_updated > datetime('now', '-5 days')
+                    )
+                )
+                AND (e.end_utc IS NULL OR e.end_utc > datetime('now'))
+                ORDER BY a.last_updated ASC
+                LIMIT ?
+            """, (limit,))
+            rows = [row[0] for row in cur.fetchall()]
+            cur.execute("DETACH DATABASE fruit")
+            return rows
+        except Exception:
+            try:
+                cur.execute("DETACH DATABASE fruit")
+            except Exception:
+                pass
+
+    # Fallback: no fruit_events.db — at minimum fix the fetch_level bug
     cur.execute("""
         SELECT event_id FROM apple_events 
         WHERE fetch_level = 'shelf'
-           OR (last_updated < datetime('now', '-23 hours') 
+           OR (fetch_level != 'full'
+               AND last_updated < datetime('now', '-23 hours') 
                AND last_updated > datetime('now', '-5 days'))
         ORDER BY last_updated ASC
         LIMIT ?
