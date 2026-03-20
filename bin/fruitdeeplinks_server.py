@@ -39,6 +39,8 @@ from flask import (
 from flask_cors import CORS
 import urllib.parse
 
+from version_info import PROJECT_URL, get_version
+
 # APScheduler (for auto-refresh)
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -1742,7 +1744,11 @@ def auto_detect_and_trigger(lane_number: int, hint_client_ip: str, self_base_url
 @app.route("/")
 def index():
     """Admin dashboard"""
-    return load_template("admin_dashboard.html")
+    return load_template(
+        "admin_dashboard.html",
+        project_version=get_version(),
+        project_url=PROJECT_URL,
+    )
 
 
 
@@ -2237,6 +2243,8 @@ def api_status():
                 "next_run": next_run,
             },
             "env_vars": env_vars,
+            "project_version": get_version(),
+            "project_url": PROJECT_URL,
             "timestamp": datetime.now().isoformat(),
         }
     )
@@ -4435,7 +4443,7 @@ def health():
 # ==================== HTML Templates ====================
 
 # ==================== Template Loading ====================
-def load_template(template_name):
+def load_template(template_name, **context):
     """Load an HTML template from the templates directory.
     
     Looks for templates in these locations (in order):
@@ -4494,6 +4502,10 @@ def load_template(template_name):
                             html = html2
                     except Exception:
                         pass
+
+                if context:
+                    for key, value in context.items():
+                        html = html.replace(f"{{{{ {key} }}}}", str(value))
 
                 return html
             except Exception as e:

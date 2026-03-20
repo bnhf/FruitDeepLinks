@@ -15,6 +15,8 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+from version_info import get_version
+
 # Paths
 BIN_DIR = Path(__file__).parent
 ROOT_DIR = BIN_DIR.parent
@@ -338,6 +340,8 @@ def main(argv=None):
         help="Force Apple TV import even if database hasn't changed (used with --skip-scrape).",
     )
     args = parser.parse_args(argv)
+
+    print(f"FruitDeepLinks version: {get_version()}")
 
     if args.bloat_stats_only is not None:
         target = args.bloat_stats_only
