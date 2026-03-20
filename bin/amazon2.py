@@ -74,6 +74,19 @@ TEXT_INFER: List[Tuple[re.Pattern, Tuple[str, str]]] = [
     (re.compile(r"\bPrime\b", re.I), ("Prime Exclusive", "aiv_prime")),
 ]
 
+REALISTIC_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+)
+
+STEALTH_INIT_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'platform', {get: () => 'Linux x86_64'});
+Object.defineProperty(navigator, 'language', {get: () => 'en-US'});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+window.chrome = { runtime: {} };
+"""
+
 @dataclass
 class ScrapeResult:
     gti: str
@@ -334,6 +347,28 @@ def _parse_benefit_id(html: str) -> str:
             return m
     return ""
 
+def _parse_benefit_id_from_text(text: str) -> str:
+    if not text:
+        return ""
+    return _parse_benefit_id(text)
+
+async def _extract_benefit_id_from_links(page) -> str:
+    try:
+        hrefs = await page.eval_on_selector_all(
+            "a[href]",
+            "els => els.map(e => e.getAttribute('href') || '').filter(Boolean)"
+        )
+    except Exception:
+        return ""
+
+    for href in hrefs:
+        if not href:
+            continue
+        benefit_id = _parse_benefit_id_from_text(href)
+        if benefit_id:
+            return benefit_id
+    return ""
+
 def _normalize(benefit_id: str, entitlement: str, page_text: str) -> Tuple[str, str, str]:
     """
     Returns: (channel_name, channel_id, failure_reason_if_any_for_unknown)
@@ -357,6 +392,27 @@ def _normalize(benefit_id: str, entitlement: str, page_text: str) -> Tuple[str, 
     sid = f"aiv_{slug}" if slug else "aiv_aggregator"
     reason = f"UNKNOWN_BENEFIT_ID benefit_id={benefit_id} fallback_to_entitlement"
     return safe_name, sid, reason
+
+def _looks_blank_unusable_page(final_url: str, benefit_id: str, entitlement: str, channel_id: str, page_text: str) -> Tuple[bool, str]:
+    has_real_signal = bool(
+        benefit_id
+        or entitlement
+        or (channel_id and channel_id not in ("aiv_amazon_error", "aiv_aggregator"))
+    )
+    if has_real_signal:
+        return False, ""
+
+    final = (final_url or "").lower()
+    visible = (page_text or "").lower()
+    if "/dp/" in final:
+        return True, "retail_redirect_no_signals"
+    if "/gp/video/offers/" in final:
+        return True, "offers_page_no_signals"
+    if "continue shopping" in visible:
+        return True, "continue_shopping_no_signals"
+    if "watch with a free trial" in visible or "subscribe and watch" in visible:
+        return True, "subscription_page_no_signals"
+    return False, ""
 
 def _looks_stale_404(resp_status: int, title: str, page_text: str, benefit_id: str, entitlement: str, channel_id: str) -> Tuple[bool, str]:
     """Return (is_stale, reason_detail).
@@ -429,7 +485,17 @@ async def scrape_one(playwright, browser, gti: str, timeout_ms: int, retries: in
         page = None
         try:
             LOG.debug("[SCRAPE] %d/%d GTI=%s URL=%s attempt=%d", progress_idx, total, gti, url, attempt + 1)
-            ctx = await browser.new_context()
+            ctx = await browser.new_context(
+                user_agent=REALISTIC_USER_AGENT,
+                locale="en-US",
+                timezone_id="America/New_York",
+                viewport={"width": 1366, "height": 768},
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Upgrade-Insecure-Requests": "1",
+                },
+            )
+            await ctx.add_init_script(STEALTH_INIT_SCRIPT)
             page = await ctx.new_page()
 
             resp = await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -469,7 +535,11 @@ async def scrape_one(playwright, browser, gti: str, timeout_ms: int, retries: in
                     else:
                         # Real error or last attempt
                         raise
-            benefit_id = _parse_benefit_id(html)
+            benefit_id = _parse_benefit_id_from_text(page.url)
+            if not benefit_id:
+                benefit_id = await _extract_benefit_id_from_links(page)
+            if not benefit_id:
+                benefit_id = _parse_benefit_id(html)
 
             entitlement = await _extract_entitlement_text(page)
 
@@ -506,9 +576,22 @@ async def scrape_one(playwright, browser, gti: str, timeout_ms: int, retries: in
                 channel_id = ""
                 LOG.debug("[STALE] GTI=%s resp_status=%s detail=%s final_url=%s title=%r", gti, resp_status, stale_detail, page.url, title)
             else:
-                status = "SUCCESS"
-                failure_reason = ""
-                failure_reason = ""
+                is_blank_unusable, blank_detail = _looks_blank_unusable_page(
+                    final_url=page.url,
+                    benefit_id=benefit_id,
+                    entitlement=entitlement,
+                    channel_id=channel_id,
+                    page_text=page_text,
+                )
+                if is_blank_unusable:
+                    status = "STALE"
+                    failure_reason = f"STALE_BLANK_PAGE {blank_detail}"
+                    channel_name = ""
+                    channel_id = ""
+                    LOG.debug("[STALE] GTI=%s detail=%s final_url=%s title=%r", gti, blank_detail, page.url, title)
+                else:
+                    status = "SUCCESS"
+                    failure_reason = ""
 
             elapsed = int((time.time() - start) * 1000)
             LOG.debug("[RESULT] %d/%d GTI=%s status=%s channel_id=%s channel_name=%s benefit_id=%s elapsed_ms=%d",
