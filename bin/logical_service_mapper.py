@@ -60,6 +60,7 @@ SERVICE_DISPLAY_NAMES = {
     'watchtru': 'truTV',
     'watchtnt': 'TNT',
     'watchtbs': 'TBS',
+    'ncaa_march_madness': 'NCAA March Madness',
     'marquee': 'Marquee Sports Network',
     
     # League-specific services
@@ -308,6 +309,10 @@ def get_logical_service_for_playable(
     # MLB At Bat provider (Apple TV uses mlbatbat:// scheme for MLB.TV)
     if provider == 'mlbatbat':
         return 'mlb'
+
+    # NCAA March Madness Live provider (Apple TV uses ncaamml:// scheme)
+    if provider == 'ncaamml':
+        return 'ncaa_march_madness'
     
     # Non-web providers: use provider as-is
     if provider not in ('http', 'https', None, ''):
@@ -483,6 +488,7 @@ def get_logical_service_priority(service_code: str) -> int:
         'watchtru': 23,
         'watchtnt': 24,
         'watchtbs': 25,  # TBS - College sports, MLB, NBA
+        'ncaa_march_madness': 24,
         
         # League-specific services (direct subscriptions)
         'nba': 26,        # NBA League Pass (direct)
