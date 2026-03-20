@@ -17,6 +17,33 @@ a:hover { text-decoration: underline; }
 .container { max-width: 1100px; margin: 0 auto; }
 h1 { color: #60a5fa; margin-bottom: 4px; font-size: 28px; }
 .subtitle { color: #94a3b8; margin-bottom: 24px; font-size: 15px; }
+.topnav {
+display: flex;
+flex-wrap: wrap;
+gap: 10px;
+margin-bottom: 24px;
+}
+.topnav-link {
+display: inline-block;
+background: #1e293b;
+color: #cbd5e1;
+border: 1px solid #334155;
+padding: 10px 16px;
+border-radius: 8px;
+font-size: 14px;
+font-weight: 600;
+text-decoration: none;
+}
+.topnav-link:hover {
+background: #273449;
+color: #ffffff;
+text-decoration: none;
+}
+.topnav-link-active {
+background: #3b82f6;
+border-color: #1d4ed8;
+color: #ffffff;
+}
 .section-header {
 color: #fbbf24;
 font-size: 20px;
@@ -109,14 +136,6 @@ color: #a5b4fc;
 font-weight: 600;
 margin-bottom: 4px;
 }
-.back-link { 
-margin-bottom: 20px; 
-display: inline-block;
-padding: 8px 14px;
-background: #1e293b;
-border-radius: 6px;
-border: 1px solid #334155;
-}
 .toc {
 background: #0f172a;
 border: 1px solid #1e293b;
@@ -153,10 +172,16 @@ color: #ef4444;
 </head>
 <body>
 <div class="container">
-<a href="/" class="back-link"> Back to Admin Dashboard</a>
-
 <h1>FruitDeepLinks API Reference</h1>
 <p class="subtitle">Complete HTTP API documentation for sports event aggregation and streaming.</p>
+
+<div class="topnav">
+<a href="/" class="topnav-link">Dashboard</a>
+<a href="/filters" class="topnav-link">Filters & Settings</a>
+<a href="/events" class="topnav-link">Event Inspector</a>
+<a href="/adb" class="topnav-link">ADB Configuration</a>
+<a href="/api" class="topnav-link topnav-link-active">API Helper</a>
+</div>
 
 <div class="toc">
 <h3>Quick Navigation</h3>

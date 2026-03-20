@@ -830,7 +830,15 @@ def main():
         
         inserted += 1
 
-        if total and (i == 1 or i % PROGRESS_EVERY == 0 or i == total):
+        pct_bucket = int((i / total) * 100) if total else 0
+        should_log_progress = (
+            total and (
+                i == 1
+                or i == total
+                or (pct_bucket > 0 and pct_bucket % 25 == 0 and pct_bucket != int((last_i / total) * 100))
+            )
+        )
+        if should_log_progress:
             now = time.perf_counter()
             chunk_dt = now - last_t
             chunk_n = i - last_i

@@ -316,11 +316,11 @@ def main():
     migrate_schema(conn)  # Auto-upgrade existing databases
 
     total = 0
-    print(f"\n🔄 Scraping ESPN Watch Graph for {args.days} days...")
+    print(f"\nScraping ESPN Watch Graph for {args.days} days...")
     with conn:
         for d in range(args.days):
             day_iso = (start_day + timedelta(days=d)).strftime("%Y-%m-%d")
-            print(f"  📅 Day {d+1}/{args.days}: {day_iso}", end=" ", flush=True)
+            print(f"  Day {d+1}/{args.days}: {day_iso}", end=" ", flush=True)
             airings = post_airings(day_iso, args.tz)
             day_count = 0
             for a in airings:
@@ -480,7 +480,7 @@ def main():
                 total += 1
                 day_count += 1
             print(f"→ {day_count} events")
-    print(f"\n✅ Ingested {total} airings into {args.db}")
+    print(f"\nIngested {total} airings into {args.db}")
 
 
 if __name__ == "__main__":

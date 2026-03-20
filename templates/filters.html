@@ -17,22 +17,34 @@ min-height: 100vh;
 .container { max-width: 1400px; margin: 0 auto; }
 h1 { font-size: 32px; margin-bottom: 10px; }
 .subtitle { color: #94a3b8; margin-bottom: 30px; }
-.nav-bar { margin-bottom: 20px; }
-
-.nav {
-margin-bottom: 30px;
+.topnav {
 display: flex;
-gap: 15px;
+flex-wrap: wrap;
+gap: 10px;
+margin-bottom: 24px;
 }
-.nav a {
-color: #60a5fa;
-text-decoration: none;
-padding: 8px 16px;
-border-radius: 6px;
-background: #1e293b;
+.topnav-link {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+padding: 10px 16px;
+border-radius: 8px;
 border: 1px solid #334155;
+background: #1e293b;
+color: #cbd5e1;
+text-decoration: none;
+font-size: 14px;
+font-weight: 600;
 }
-.nav a:hover { background: #334155; }
+.topnav-link:hover {
+background: #273449;
+color: #ffffff;
+}
+.topnav-link-active {
+background: #2563eb;
+border-color: #1d4ed8;
+color: #ffffff;
+}
 .card {
 background: #1e293b;
 border-radius: 12px;
@@ -135,6 +147,8 @@ margin-right: 10px;
 }
 .btn:hover { background: #2563eb; }
 .btn:disabled { background: #475569; cursor: not-allowed; }
+.btn-secondary { background: #64748b; }
+.btn-secondary:hover { background: #475569; }
 .btn-success { background: #22c55e; }
 .btn-success:hover { background: #16a34a; }
 .actions {
@@ -315,8 +329,12 @@ font-style: italic;
 <h1>Filters & Settings</h1>
 <p class="subtitle">Configure which services and content types to include in your channels</p>
 
-<div class="nav">
-<a href="/">Back to Dashboard</a>
+<div class="topnav">
+<a href="/" class="topnav-link">Dashboard</a>
+<a href="/filters" class="topnav-link topnav-link-active">Filters & Settings</a>
+<a href="/events" class="topnav-link">Event Inspector</a>
+<a href="/adb" class="topnav-link">ADB Configuration</a>
+<a href="/api" class="topnav-link">API Helper</a>
 </div>
 
 <div class="stats-summary" id="stats-summary">

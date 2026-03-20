@@ -38,9 +38,9 @@ def ensure_espn_graph_id_column(fruit_db: str) -> None:
         cursor.execute("ALTER TABLE playables ADD COLUMN espn_graph_id TEXT")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_playables_espn_graph ON playables(espn_graph_id)")
         conn.commit()
-        _log("✅ Column added successfully")
+        _log("Column added successfully")
     else:
-        _log("✅ espn_graph_id column already exists")
+        _log("espn_graph_id column already exists")
     
     conn.close()
 
@@ -56,7 +56,7 @@ def get_apple_espn_playables(fruit_db: str) -> List[Dict]:
       - external_id: ESPN's program ID (UUID from playables JSON)
       - title: Event title for logging
     """
-    _log("⚡ Using optimized SQL JSON extraction with json_each...")
+    _log("Using optimized SQL JSON extraction with json_each")
     
     conn = sqlite3.connect(fruit_db)
     cursor = conn.cursor()
@@ -103,7 +103,7 @@ def get_espn_graph_events(espn_db: str) -> Dict[str, Dict]:
     try:
         conn = sqlite3.connect(espn_db)
     except sqlite3.OperationalError as e:
-        _log(f"❌ Error: Could not open ESPN database: {espn_db}")
+        _log(f"Error: Could not open ESPN database: {espn_db}")
         _log(f"   {e}")
         _log("\nMake sure you've run the ESPN scraper first:")
         _log("  python fruit_ingest_espn_graph.py --db data/espn_graph.db --days 7")
@@ -113,7 +113,7 @@ def get_espn_graph_events(espn_db: str) -> Dict[str, Dict]:
     
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
     if not cursor.fetchone():
-        _log(f"❌ Error: No 'events' table found in {espn_db}")
+        _log(f"Error: No 'events' table found in {espn_db}")
         _log("\nRun the ESPN scraper first to populate the database")
         conn.close()
         sys.exit(1)
@@ -171,10 +171,10 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
     start_time = time.time()
     apple_playables = get_apple_espn_playables(fruit_db)
     load_time = time.time() - start_time
-    _log(f"⏱️  Loaded in {load_time:.2f} seconds")
+    _log(f"Loaded in {load_time:.2f} seconds")
     
     if not apple_playables:
-        _log("⚠️  No ESPN playables found in Apple TV database")
+        _log("No ESPN playables found in Apple TV database")
         _log("   Make sure fruit_import_appletv.py has run successfully")
         return
     
@@ -182,10 +182,10 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
     start_time = time.time()
     espn_events = get_espn_graph_events(espn_db)
     load_time = time.time() - start_time
-    _log(f"⏱️  Loaded in {load_time:.2f} seconds")
+    _log(f"Loaded in {load_time:.2f} seconds")
     
     if not espn_events:
-        _log("⚠️  No ESPN events found in ESPN Watch Graph database")
+        _log("No ESPN events found in ESPN Watch Graph database")
         return
     
     _log("\nStep 3: Matching playables using program.id...")
@@ -206,7 +206,7 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
         # Progress indicator every 10%
         progress = int((idx / total) * 100)
         if progress >= last_progress + 10:
-            _log(f"🔄 Progress: {progress}% ({idx}/{total}) - {matched} matched, {unmatched} unmatched")
+            _log(f"Progress: {progress}% ({idx}/{total}) - {matched} matched, {unmatched} unmatched")
             last_progress = progress
         
         if external_id in espn_events:
@@ -222,7 +222,7 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
                         espn_playback_id = feed_url.split('/id/')[-1]
                         espn_playback_id = espn_playback_id.split('?')[0].split('#')[0]
                 except Exception as e:
-                    _log(f"⚠️ Warning: Could not extract playback ID from {feed_url}: {e}")
+                    _log(f"Warning: Could not extract playback ID from {feed_url}: {e}")
             
             # Fallback to event ID format
             if not espn_playback_id and espn_event.get('id'):
@@ -240,13 +240,13 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
                 matched += 1
                 
                 # Log first 5 matches
-                if matched <= 5:
-                    _log(f"✅ Match #{matched}: {playable['title'][:60]}")
+                if matched <= 3:
+                    _log(f"Match #{matched}: {playable['title'][:60]}")
                     _log(f"   program.id:     {external_id}")
                     _log(f"   ESPN Graph ID:  {espn_graph_id}")
                     _log(f"   FireTV URL:     https://www.espn.com/watch/player/_/id/{espn_graph_id}")
             else:
-                _log(f"⚠️  Match found but no usable ESPN ID: {playable['title'][:50]}")
+                _log(f"Match found but no usable ESPN ID: {playable['title'][:50]}")
                 unmatched += 1
         else:
             unmatched += 1
@@ -258,17 +258,17 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
             })
             
             # Log first 3 unmatched
-            if unmatched <= 3:
-                _log(f"❌ No match: {playable['title'][:60]}")
+            if unmatched <= 2:
+                _log(f"No match: {playable['title'][:60]}")
                 _log(f"   program.id: {external_id}")
     
     match_time = time.time() - start_time
-    _log(f"\n⏱️  Matching completed in {match_time:.2f} seconds")
+    _log(f"\nMatching completed in {match_time:.2f} seconds")
     
     # Apply batch update
     updated = 0
     if not dry_run and updates_to_apply:
-        _log(f"\n💾 Applying {len(updates_to_apply)} updates in batch...")
+        _log(f"\nApplying {len(updates_to_apply)} updates in batch...")
         start_time = time.time()
         
         conn = sqlite3.connect(fruit_db)
@@ -285,7 +285,7 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
         conn.close()
         
         update_time = time.time() - start_time
-        _log(f"✅ Batch update complete in {update_time:.2f} seconds - {updated} playables updated")
+        _log(f"Batch update complete in {update_time:.2f} seconds - {updated} playables updated")
     elif dry_run:
         updated = len(updates_to_apply)
     
@@ -296,14 +296,14 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
     _log(f"Total Apple TV ESPN playables: {len(apple_playables)}")
     _log(f"Total ESPN Watch Graph events: {len(espn_events)}")
     _log(f"")
-    _log(f"✅ Matched:   {matched} ({matched/len(apple_playables)*100:.1f}%)")
-    _log(f"❌ Unmatched: {unmatched} ({unmatched/len(apple_playables)*100:.1f}%)")
+    _log(f"Matched:   {matched} ({matched/len(apple_playables)*100:.1f}%)")
+    _log(f"Unmatched: {unmatched} ({unmatched/len(apple_playables)*100:.1f}%)")
     
     if dry_run:
-        _log("\n🔍 This was a DRY RUN - no changes were made")
+        _log("\nDry run only - no changes were made")
         _log("   Run without --dry-run to update the database")
     else:
-        _log(f"\n✅ Successfully enriched {updated} ESPN playables with FireTV-compatible IDs")
+        _log(f"\nSuccessfully enriched {updated} ESPN playables with FireTV-compatible IDs")
     
     # Write unmatched events to file
     if unmatched_details:
@@ -324,10 +324,10 @@ def enrich_playables(fruit_db: str, espn_db: str, dry_run: bool = False, skip_en
                 f.write(f"   Apple program.id: {event['program_id']}\n")
                 f.write(f"   Playable ID: {event['playable_id']}\n\n")
         
-        _log(f"\n🔍 Wrote unmatched events to: {debug_file}")
+        _log(f"\nWrote unmatched events to: {debug_file} ({len(unmatched_details)} rows)")
     
     if unmatched > 0:
-        _log("\n💡 Tips for improving match rate:")
+        _log("\nTips for improving match rate:")
         _log("   - ESPN Watch Graph might not have all events yet")
         _log("   - Some events might be on different days")
         _log("   - Try running ESPN scraper with more days: --days 14")

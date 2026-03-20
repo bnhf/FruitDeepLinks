@@ -504,7 +504,7 @@ async def scrape_one(playwright, browser, gti: str, timeout_ms: int, retries: in
                 failure_reason = "STALE_GTI_404"
                 channel_name = ""
                 channel_id = ""
-                LOG.info("[STALE] GTI=%s resp_status=%s detail=%s final_url=%s title=%r", gti, resp_status, stale_detail, page.url, title)
+                LOG.debug("[STALE] GTI=%s resp_status=%s detail=%s final_url=%s title=%r", gti, resp_status, stale_detail, page.url, title)
             else:
                 status = "SUCCESS"
                 failure_reason = ""
@@ -534,7 +534,7 @@ async def scrape_one(playwright, browser, gti: str, timeout_ms: int, retries: in
             if "navigating and changing" in str(e) or "page is navigating" in str(e):
                 status = "STALE"
                 failure_reason = "TRANSIENT_NAVIGATION_ERROR"
-                LOG.warning("[STALE] %d/%d GTI=%s attempt=%d reason=transient_navigation", progress_idx, total, gti, attempt + 1)
+                LOG.debug("[STALE] %d/%d GTI=%s attempt=%d reason=transient_navigation", progress_idx, total, gti, attempt + 1)
             else:
                 status = "ERROR"
                 failure_reason = last_err
@@ -839,7 +839,7 @@ async def run(
                     r.elapsed_ms,
                 )
             else:
-                LOG.info(
+                LOG.debug(
                     "[FAIL] %d/%d GTI=%s status=%s reason=%s channel_id=%s channel_name=%s benefit_id=%s elapsed_ms=%s",
                     done,
                     total_gtis,

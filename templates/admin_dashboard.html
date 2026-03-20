@@ -16,6 +16,34 @@ padding: 20px;
 .title-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 h1 { color: #60a5fa; margin-bottom: 10px; }
 .subtitle { color: #94a3b8; margin-bottom: 30px; }
+.topnav {
+display: flex;
+flex-wrap: wrap;
+gap: 10px;
+margin-bottom: 24px;
+}
+.topnav-link {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+padding: 10px 16px;
+border-radius: 8px;
+border: 1px solid #334155;
+background: #1e293b;
+color: #cbd5e1;
+text-decoration: none;
+font-size: 14px;
+font-weight: 600;
+}
+.topnav-link:hover {
+background: #273449;
+color: #ffffff;
+}
+.topnav-link-active {
+background: #2563eb;
+border-color: #1d4ed8;
+color: #ffffff;
+}
 .version-link {
 color: #fbbf24;
 text-decoration: none;
@@ -36,6 +64,9 @@ background: #1e293b;
 border: 1px solid #334155;
 border-radius: 8px;
 padding: 20px;
+}
+.card-wide {
+grid-column: span 2;
 }
 .card h2 { color: #60a5fa; font-size: 18px; margin-bottom: 15px; }
 .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; }
@@ -73,6 +104,90 @@ font-size: 13px;
 .status-running { color: #fbbf24; }
 .status-success { color: #34d399; }
 .status-failed { color: #f87171; }
+.status-muted { color: #94a3b8; }
+.progress-panel {
+background: #0f172a;
+border: 1px solid #334155;
+border-radius: 8px;
+padding: 12px;
+margin-bottom: 12px;
+}
+.progress-title {
+font-size: 16px;
+font-weight: 600;
+margin-bottom: 6px;
+}
+.progress-meta {
+color: #94a3b8;
+font-size: 13px;
+margin-bottom: 8px;
+line-height: 1.5;
+word-break: break-word;
+}
+.progress-detail {
+color: #cbd5e1;
+font-family: 'Courier New', monospace;
+font-size: 12px;
+line-height: 1.5;
+white-space: normal;
+overflow-wrap: anywhere;
+}
+.progress-list {
+margin-top: 10px;
+display: grid;
+gap: 6px;
+}
+.progress-item {
+display: flex;
+justify-content: space-between;
+align-items: flex-start;
+gap: 12px;
+font-size: 13px;
+border-top: 1px solid #1e293b;
+padding-top: 6px;
+}
+.progress-item:first-child {
+border-top: none;
+padding-top: 0;
+}
+.progress-item-label {
+color: #cbd5e1;
+flex: 1 1 auto;
+min-width: 0;
+}
+.progress-item-status {
+white-space: nowrap;
+font-weight: 600;
+flex: 0 0 auto;
+}
+.refresh-actions {
+display: flex;
+flex-wrap: wrap;
+gap: 10px;
+margin-top: 8px;
+}
+.refresh-actions .btn {
+margin-right: 0;
+}
+
+@media (max-width: 980px) {
+.card-wide {
+grid-column: auto;
+}
+}
+
+@media (max-width: 640px) {
+.topnav {
+margin-bottom: 20px;
+}
+.progress-item {
+flex-direction: column;
+gap: 4px;
+}
+.progress-item-status {
+white-space: normal;
+}
+}
 
 .provider-lanes-table {
 width: 100%;
@@ -119,11 +234,12 @@ color: #e2e8f0;
 </div>
 <p class="subtitle">Multi-source sports event aggregator</p>
 
-<div class="nav-bar">
-<a href="/filters" class="btn btn-secondary">🎛️ Filters & Settings</a>
-<a href="/events" class="btn btn-secondary">🔎 Event Inspector</a>
-<a href="/adb" class="btn btn-secondary">📺 ADB Configuration</a>
-<a href="/api" class="btn btn-secondary">📡 API Helper</a>
+<div class="topnav">
+<a href="/" class="topnav-link topnav-link-active">Dashboard</a>
+<a href="/filters" class="topnav-link">Filters & Settings</a>
+<a href="/events" class="topnav-link">Event Inspector</a>
+<a href="/adb" class="topnav-link">ADB Configuration</a>
+<a href="/api" class="topnav-link">API Helper</a>
 </div>
 
 <div class="grid">
@@ -142,11 +258,14 @@ color: #e2e8f0;
 <div id="env-vars">Loading...</div>
 </div>
 
-<div class="card">
+<div class="card card-wide">
 <h2>Refresh Control</h2>
+<div id="refresh-progress-panel" class="progress-panel">Loading...</div>
 <div id="refresh-status" style="margin-bottom: 15px;">Loading...</div>
+<div class="refresh-actions">
 <button class="btn" onclick="triggerRefresh(false)" id="btn-refresh"> Full Refresh</button>
 <button class="btn btn-secondary" onclick="triggerRefresh(true)" id="btn-refresh-skip"> Skip Scrape</button>
+</div>
 
 <div style="margin-top:15px; padding-top:15px; border-top:1px solid #334155;">
 <h3 style="font-size:15px; margin-bottom:8px;">Database Management</h3>
@@ -185,6 +304,84 @@ Enable daily auto refresh
 <script>
 let logEventSource;
 let _scrollListenerAttached = false;
+
+function renderRefreshProgress(refresh) {
+const panel = document.getElementById('refresh-progress-panel');
+if (!panel) return;
+
+const progress = refresh.progress || {};
+const completed = Array.isArray(progress.completed_steps) ? progress.completed_steps.slice().reverse() : [];
+const totalSteps = progress.total_steps || '?';
+const currentKey = progress.current_step_key || refresh.current_step || 'Pending';
+const currentLabel = progress.current_step_label || (refresh.running ? 'Refresh starting' : 'No refresh running');
+const completedCount = Array.isArray(progress.completed_steps) ? progress.completed_steps.length : 0;
+const startedAt = progress.started_at ? new Date(progress.started_at) : null;
+const finishedAt = progress.finished_at ? new Date(progress.finished_at) : null;
+
+const statusClass = refresh.running
+? 'status-running'
+: ((refresh.last_status || progress.phase) === 'success' ? 'status-success' : ((refresh.last_status || progress.phase) ? 'status-failed' : 'status-muted'));
+
+const statusText = refresh.running
+? 'Running'
+: ((refresh.last_status || progress.phase) === 'success' ? 'Last run succeeded' : ((refresh.last_status || progress.phase) ? `Last run: ${refresh.last_status || progress.phase}` : 'Idle'));
+
+const metaBits = [];
+if (progress.version) metaBits.push(`v${progress.version}`);
+if (progress.skip_scrape) metaBits.push('skip-scrape');
+if (startedAt) metaBits.push(`started ${startedAt.toLocaleString()}`);
+if (!refresh.running && finishedAt) metaBits.push(`finished ${finishedAt.toLocaleString()}`);
+
+let summaryBits = [];
+if (!refresh.running && startedAt && finishedAt) {
+const durationSeconds = Math.max(0, (finishedAt - startedAt) / 1000);
+const durationText = durationSeconds >= 60
+? `${Math.floor(durationSeconds / 60)}m ${(durationSeconds % 60).toFixed(1)}s`
+: `${durationSeconds.toFixed(1)} seconds`;
+summaryBits.push(`Duration: ${durationText}`);
+}
+if (!refresh.running && completedCount) {
+const totalStepCount = Number(totalSteps);
+if (Number.isFinite(totalStepCount) && totalStepCount > 0) {
+const skippedCount = Math.max(0, totalStepCount - completedCount);
+summaryBits.push(`Executed steps: ${completedCount}`);
+if (skippedCount > 0) summaryBits.push(`Skipped steps: ${skippedCount}`);
+} else {
+summaryBits.push(`Executed steps: ${completedCount}`);
+}
+}
+
+const detailText = (!refresh.running && summaryBits.length)
+? ''
+: (progress.current_detail || '');
+
+const rows = completed.length
+? completed.map((item) => {
+const itemStatus = item.status === 'ok'
+? '<span class="progress-item-status status-success">Done</span>'
+: item.status === 'failed_nonfatal'
+? '<span class="progress-item-status status-running">Non-fatal</span>'
+: '<span class="progress-item-status status-failed">Failed</span>';
+return `<div class="progress-item"><span class="progress-item-label">[${item.step}/${totalSteps}] ${item.label}</span>${itemStatus}</div>`;
+}).join('')
+: '<div class="status-muted">No completed steps yet.</div>';
+
+const titleLine = refresh.running
+? `[${currentKey}/${totalSteps}] ${currentLabel}`
+: ((refresh.last_status || progress.phase) === 'success'
+? 'Refresh completed successfully'
+: ((refresh.last_status || progress.phase)
+? `Refresh finished with status: ${refresh.last_status || progress.phase}`
+: 'No refresh running'));
+
+panel.innerHTML = `
+<div class="progress-title ${statusClass}">${statusText}</div>
+<div class="progress-meta">${titleLine}${metaBits.length ? ' • ' + metaBits.join(' • ') : ''}</div>
+${summaryBits.length ? `<div class="progress-detail">${_escapeHtml(summaryBits.join(' • '))}</div>` : ''}
+${detailText ? `<div class="progress-detail">${_escapeHtml(detailText)}</div>` : ''}
+<div class="progress-list">${rows}</div>
+`;
+}
 
 async function loadStatus() {
 try {
@@ -231,9 +428,10 @@ const refreshStatus = document.getElementById('refresh-status');
 const refresh = data.refresh;
 const btnRefresh = document.getElementById('btn-refresh');
 const btnRefreshSkip = document.getElementById('btn-refresh-skip');
+renderRefreshProgress(refresh);
 
 if (refresh.running) {
-refreshStatus.innerHTML = `<span class="status-running"> Running: ${refresh.current_step || 'Processing...'}</span>`;
+refreshStatus.innerHTML = '';
 btnRefresh.disabled = true;
 btnRefreshSkip.disabled = true;
 } else {
@@ -304,6 +502,7 @@ console.error('Failed to load status:', err);
 document.getElementById('db-stats').innerHTML = `<div style="color: #f87171;">API Error: ${err.message}</div>`;
 document.getElementById('file-list').innerHTML = `<div style="color: #f87171;">Failed to load files</div>`;
 document.getElementById('refresh-status').innerHTML = `<div style="color: #f87171;">Status unavailable</div>`;
+document.getElementById('refresh-progress-panel').innerHTML = `<div style="color: #f87171;">Refresh progress unavailable</div>`;
 }
 }
 
@@ -382,6 +581,7 @@ const LOG_STORE_SCROLL_KEY = "fdl_admin_live_logs_scroll"; // last scrollTop (wh
 let _logSaveTimer = null;
 let _logLines = [];   // [{seq:number|null, text:string}]
 let _lastSeq = 0;
+let _logReconnectTimer = null;
 
 function _loadLogsFromSession() {
   try {
@@ -500,13 +700,17 @@ function _addLogLine(textLine, seqOrNull) {
   _scheduleSaveLogsToSession();
 }
 
-function setupLogStream() {
+function setupLogStream(forceTail = false) {
   if (logEventSource) logEventSource.close();
+  if (_logReconnectTimer) {
+    clearTimeout(_logReconnectTimer);
+    _logReconnectTimer = null;
+  }
 
   const statusEl = document.getElementById("log-status");
   if (statusEl) statusEl.textContent = "CONNECTING…";
 
-  const hasSeq = (_lastSeq && _lastSeq > 0);
+  const hasSeq = !forceTail && (_lastSeq && _lastSeq > 0);
   const qs = new URLSearchParams();
   if (hasSeq) {
     qs.set("since", String(_lastSeq));
@@ -517,6 +721,7 @@ function setupLogStream() {
 
   logEventSource = new EventSource(`/api/logs/stream?${qs.toString()}`);
   const container = document.getElementById("log-container");
+  let sawMessage = false;
 
   // Persist scroll position when user scrolls up (and restore it on return)
   // Only attach listener once - setupLogStream may be called multiple times on reconnect
@@ -532,6 +737,7 @@ function setupLogStream() {
   }
 
   logEventSource.onmessage = (event) => {
+    sawMessage = true;
     let lineText = "";
     let seq = null;
 
@@ -552,7 +758,28 @@ function setupLogStream() {
     // keep-alive heartbeat
   });
 
+  if (hasSeq) {
+    _logReconnectTimer = setTimeout(() => {
+      if (!sawMessage) {
+        try { logEventSource.close(); } catch (e) {}
+        _lastSeq = 0;
+        try {
+          sessionStorage.removeItem(LOG_STORE_SEQ_KEY);
+          sessionStorage.removeItem(LOG_STORE_KEY);
+          sessionStorage.removeItem(LOG_STORE_SCROLL_KEY);
+        } catch (e) {}
+        _logLines = [];
+        _renderLogsIntoDom();
+        setupLogStream(true);
+      }
+    }, 2000);
+  }
+
   logEventSource.onerror = () => {
+    if (_logReconnectTimer) {
+      clearTimeout(_logReconnectTimer);
+      _logReconnectTimer = null;
+    }
     if (statusEl) statusEl.textContent = "RECONNECTING…";
     try { logEventSource.close(); } catch (e) {}
     setTimeout(setupLogStream, 2000);

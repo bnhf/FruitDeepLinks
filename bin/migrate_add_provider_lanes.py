@@ -35,7 +35,7 @@ def ensure_provider_lanes_table(conn: sqlite3.Connection, log: logging.Logger) -
         "SELECT name FROM sqlite_master WHERE type='table' AND name='provider_lanes';"
     )
     if cur.fetchone():
-        log.info("Table provider_lanes already exists; nothing to create.")
+        log.debug("Table provider_lanes already exists; nothing to create.")
         return False
 
     log.info("Creating table provider_lanes ...")
@@ -129,28 +129,31 @@ def migrate(db_path: Path) -> None:
         raise SystemExit(1)
 
     conn = sqlite3.connect(str(db_path))
+    created = False
+    bootstrap_attempted = False
+    existing_count = 0
     try:
         created = ensure_provider_lanes_table(conn, log)
         if created:
+            bootstrap_attempted = True
             bootstrap_from_playables(conn, log)
         else:
             # Even if the table already existed, we can still try to back-fill
             # any missing providers if the table is currently empty.
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM provider_lanes;")
-            count = cur.fetchone()[0] or 0
-            if count == 0:
-                log.info(
-                    "provider_lanes exists but is empty; attempting bootstrap from playables/events."
-                )
+            existing_count = cur.fetchone()[0] or 0
+            if existing_count == 0:
+                bootstrap_attempted = True
                 bootstrap_from_playables(conn, log)
-            else:
-                log.info(
-                    "provider_lanes already has %d row(s); leaving as-is.", count
-                )
     finally:
         conn.close()
-        log.info("Migration complete.")
+        if created:
+            log.info("Migration complete: provider_lanes created.")
+        elif bootstrap_attempted:
+            log.info("Migration complete: provider_lanes existed and bootstrap was attempted.")
+        else:
+            log.info("Migration complete: provider_lanes already present with %d row(s).", existing_count)
 
 
 def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
@@ -170,4 +173,3 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     migrate(args.db_path)
-

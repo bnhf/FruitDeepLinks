@@ -48,7 +48,7 @@ def create_playables_table(conn: sqlite3.Connection):
     """)
 
     conn.commit()
-    print("✓ Created playables table (if missing)")
+    print("Created playables table (if missing)")
 
 
 def create_user_preferences_table(conn: sqlite3.Connection):
@@ -64,7 +64,7 @@ def create_user_preferences_table(conn: sqlite3.Connection):
     """)
 
     conn.commit()
-    print("✓ Created user_preferences table (if missing)")
+    print("Created user_preferences table (if missing)")
 
 
 def add_default_preferences(conn: sqlite3.Connection):
@@ -87,7 +87,7 @@ def add_default_preferences(conn: sqlite3.Connection):
         """, (key, value, now))
 
     conn.commit()
-    print("✓ Added default preferences (if missing)")
+    print("Added default preferences (if missing)")
 
 
 def _get_table_columns(conn: sqlite3.Connection, table: str) -> set:
@@ -114,7 +114,7 @@ def add_lane_provider_columns(conn: sqlite3.Connection):
     """)
     row = cur.fetchone()
     if not row:
-        print("⚠ lane_events table not found; skipping lane provider migration")
+        print("Warning: lane_events table not found; skipping lane provider migration")
         return
 
     existing = _get_table_columns(conn, "lane_events")
@@ -129,17 +129,17 @@ def add_lane_provider_columns(conn: sqlite3.Connection):
     to_add = [(name, coltype) for name, coltype in planned if name not in existing]
 
     if not to_add:
-        print("✓ lane_events already has provider/deeplink columns")
+        print("lane_events already has provider/deeplink columns")
         return
 
     print("Adding provider/deeplink columns to lane_events:")
     for name, coltype in to_add:
         sql = f"ALTER TABLE lane_events ADD COLUMN {name} {coltype}"
-        print(f"  → {sql}")
+        print(f"  {sql}")
         cur.execute(sql)
 
     conn.commit()
-    print("✓ lane_events migration complete")
+    print("lane_events migration complete")
 
 
 
@@ -154,21 +154,21 @@ def add_hero_image_column(conn: sqlite3.Connection):
     """)
     row = cur.fetchone()
     if not row:
-        print("⚠ events table not found; skipping hero_image_url migration")
+        print("Warning: events table not found; skipping hero_image_url migration")
         return
 
     existing = _get_table_columns(conn, "events")
     if "hero_image_url" in existing:
-        print("✓ events already has hero_image_url column")
+        print("events already has hero_image_url column")
         return
 
     print("Adding hero_image_url column to events:")
     sql = "ALTER TABLE events ADD COLUMN hero_image_url TEXT"
-    print(f"  → {sql}")
+    print(f"  {sql}")
     cur.execute(sql)
 
     conn.commit()
-    print("✓ hero_image_url migration complete")
+    print("hero_image_url migration complete")
 
 def migrate_existing_data(conn: sqlite3.Connection):
     """Migrate existing pvid data to playables table if needed"""
@@ -179,7 +179,7 @@ def migrate_existing_data(conn: sqlite3.Connection):
     columns = {row[1] for row in cur.fetchall()}
 
     if 'raw_attributes_json' not in columns:
-        print("⚠ No raw_attributes_json column on events - skipping playables migration hint")
+        print("Warning: no raw_attributes_json column on events - skipping playables migration hint")
         return
 
     # Count events with playables data
@@ -193,11 +193,11 @@ def migrate_existing_data(conn: sqlite3.Connection):
     print(f"Found {event_count} events with raw data")
 
     if event_count == 0:
-        print("⚠ No events to migrate into playables; import script will populate on future runs")
+        print("No events to migrate into playables; import script will populate on future runs")
         return
 
     # This will be handled by the import script on next run
-    print("ℹ Existing events will be migrated into playables on the next refresh run")
+    print("Existing events will be migrated into playables on the next refresh run")
 
 
 def main():
@@ -210,7 +210,7 @@ def main():
     db_path = Path(args.db)
 
     if not db_path.exists():
-        print(f"✗ Database not found: {db_path}")
+        print(f"Database not found: {db_path}")
         return 1
 
     print("=" * 70)
@@ -234,13 +234,13 @@ def main():
 
     # Backup reminder
     if not args.yes:
-        print("⚠ IMPORTANT: Back up your database before running migrations!")
+        print("Important: back up your database before running migrations")
         response = input("Continue? (yes/no): ")
         if response.lower() != 'yes':
             print("Migration cancelled")
             return 0
     else:
-        print("⚠ Skipping confirmation (--yes flag provided)")
+        print("Skipping confirmation (--yes flag provided)")
 
     print()
 
@@ -256,12 +256,12 @@ def main():
 
         print()
         print("=" * 70)
-        print("✓ Migration completed successfully!")
+        print("Migration completed successfully")
         print("=" * 70)
         return 0
 
     except Exception as e:
-        print(f"\n✗ Migration failed: {e}")
+        print(f"\nMigration failed: {e}")
         conn.rollback()
         return 1
     finally:
@@ -271,4 +271,3 @@ def main():
 if __name__ == '__main__':
     import sys
     sys.exit(main())
-

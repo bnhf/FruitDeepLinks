@@ -79,7 +79,7 @@ def fix_spanish_only_playables(
     Returns: Number of playables updated
     """
     if not playables:
-        print("✅ No Spanish-only ESPN playables found")
+        print("No Spanish-only ESPN playables found")
         return 0
     
     import json
@@ -148,7 +148,7 @@ def fix_spanish_only_playables(
         updates.append((new_deeplink, event_id, playable_id))
     
     if not updates:
-        print("✅ All Spanish-only playables already using best playID")
+        print("All Spanish-only playables already using best playID")
         return 0
     
     if dry_run:
@@ -163,7 +163,7 @@ def fix_spanish_only_playables(
     """, updates)
     conn.commit()
     
-    print(f"✅ Updated {len(updates)} Spanish-only playables")
+    print(f"Updated {len(updates)} Spanish-only playables")
     return len(updates)
 
 
@@ -219,7 +219,7 @@ def main():
     
     db_path = Path(args.db)
     if not db_path.exists():
-        print(f"❌ Database not found: {db_path}")
+        print(f"Database not found: {db_path}")
         return 1
     
     conn = sqlite3.connect(db_path)
@@ -235,7 +235,7 @@ def main():
     playables = find_spanish_only_events(conn)
     
     if not playables:
-        print("✅ No Spanish-only ESPN playables found")
+        print("No Spanish-only ESPN playables found")
         show_statistics(conn)
         conn.close()
         return 0

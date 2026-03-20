@@ -124,7 +124,7 @@ class FanatizScraper:
             'filterBy-statusCategory': self.status_category,
         }
             
-        logger.info(f"Fetching page {page} ({items_per_page} items/page)")
+        logger.debug(f"Fetching page {page} ({items_per_page} items/page)")
         
         try:
             response = self.session.get(url, params=params, timeout=30)
@@ -135,8 +135,8 @@ class FanatizScraper:
             # Log pagination info
             if 'data' in data and 'pagination' in data['data']:
                 pagination = data['data']['pagination']
-                logger.info(f"  → Page {pagination.get('page')}/{pagination.get('pages')} "
-                          f"({pagination.get('totalItems')} total future events)")
+                logger.debug(f"  → Page {pagination.get('page')}/{pagination.get('pages')} "
+                             f"({pagination.get('totalItems')} total future events)")
             
             return data
             
@@ -180,7 +180,12 @@ class FanatizScraper:
                 logger.info(f"No more events on page {page}")
                 break
             
-            logger.info(f"Processing {len(items)} events from page {page}")
+            total_pages = data.get('data', {}).get('pagination', {}).get('pages', 0)
+            if page == 1 or (page % 5 == 0) or (total_pages and page == total_pages):
+                logger.info(
+                    f"Processed page {page}/{total_pages or '?'} "
+                    f"({len(items)} events, kept={self.stats['total_kept']}, skipped={self.stats['total_skipped']})"
+                )
             
             for raw_event in items:
                 try:
@@ -222,7 +227,7 @@ class FanatizScraper:
                 page += 1
                 time.sleep(1.2)  # Rate limiting with added delay to avoid potential limits
         
-        logger.info(f"\nScrape complete:")
+        logger.info("Scrape complete:")
         logger.info(f"  Events fetched: {self.stats['total_fetched']}")
         logger.info(f"  Events kept: {self.stats['total_kept']}")
         logger.info(f"  Events skipped (canceled/finished/old): {self.stats['total_skipped']}")

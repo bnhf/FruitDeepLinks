@@ -22,14 +22,14 @@ def ensure_locale_column(conn: sqlite3.Connection) -> bool:
     columns = [row[1] for row in cur.fetchall()]
     
     if 'locale' in columns:
-        print("✅ locale column already exists")
+        print("locale column already exists")
         return False
     
     print("Adding locale column to playables table...")
     cur.execute("ALTER TABLE playables ADD COLUMN locale TEXT")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_playables_locale ON playables(locale)")
     conn.commit()
-    print("✅ locale column added successfully")
+    print("locale column added successfully")
     return True
 
 
@@ -51,12 +51,12 @@ def populate_locale_for_espn(conn: sqlite3.Connection) -> int:
     columns = {row[1] for row in cur.fetchall()}
     
     if 'locale' not in columns:
-        print("⚠️  locale column doesn't exist, skipping population")
+        print("locale column doesn't exist, skipping population")
         return 0
     
     # Check for required columns (may not exist on fresh installs)
     if 'logical_service' not in columns:
-        print("⚠️  logical_service column doesn't exist yet (fresh install?), skipping population")
+        print("logical_service column doesn't exist yet (fresh install?), skipping population")
         return 0
     
     # Check if service_name column exists (added in recent migration)
@@ -84,11 +84,11 @@ def populate_locale_for_espn(conn: sqlite3.Connection) -> int:
         rows = cur.fetchall()
     except sqlite3.OperationalError as e:
         # Handle case where table exists but is empty or missing columns
-        print(f"⚠️  Could not query playables: {e}")
+        print(f"Could not query playables: {e}")
         return 0
     
     if not rows:
-        print("✅ All ESPN playables have locale populated (or no ESPN playables yet)")
+        print("All ESPN playables have locale populated (or no ESPN playables yet)")
         return 0
     
     print(f"Found {len(rows)} ESPN playables missing locale")
@@ -127,7 +127,7 @@ def populate_locale_for_espn(conn: sqlite3.Connection) -> int:
     spanish_count = sum(1 for u in updates if u[0] == "es_MX")
     english_count = len(updates) - spanish_count
     
-    print(f"✅ Updated {len(updates)} playables:")
+    print(f"Updated {len(updates)} playables:")
     print(f"   - {english_count} marked as English (en_US)")
     print(f"   - {spanish_count} marked as Spanish (es_MX)")
     
@@ -142,7 +142,7 @@ def main():
     
     db_path = Path(args.db)
     if not db_path.exists():
-        print(f"❌ Database not found: {db_path}")
+        print(f"Database not found: {db_path}")
         return 1
     
     conn = sqlite3.connect(db_path)
@@ -156,9 +156,9 @@ def main():
     conn.close()
     
     if column_added or updated_count > 0:
-        print(f"\n✅ Migration complete")
+        print("\nMigration complete")
     else:
-        print(f"\n✅ No changes needed (already migrated)")
+        print("\nNo changes needed (already migrated)")
     
     return 0
 

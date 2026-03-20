@@ -384,7 +384,7 @@ def make_driver(headless: bool = False) -> webdriver.Chrome:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger = logging.getLogger(__name__)
     
-    logger.info("=== Starting Chrome/Chromium Driver Initialization ===")
+    logger.info("Initializing Chrome/Chromium driver")
     
     opts = Options()
     if headless:
@@ -405,53 +405,56 @@ def make_driver(headless: bool = False) -> webdriver.Chrome:
     
     def _try_start_driver(driver_path: str):
         try:
-            logger.info(f"Attempting to start driver at: {driver_path}")
             service = Service(driver_path)
             driver = webdriver.Chrome(service=service, options=opts)
-            logger.info("Browser launched successfully!")
             return driver
         except Exception as e:
-            logger.error(f"Failed to start with {driver_path}: {e}")
+            logger.debug(f"Failed to start with {driver_path}: {e}")
             return None
+
+    def _find_system_browser() -> Optional[str]:
+        for browser_path in ("/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"):
+            if os.path.exists(browser_path):
+                return browser_path
+        return None
+
+    def _find_system_chromedriver() -> Optional[str]:
+        for driver_path in (
+            "/usr/bin/chromedriver",
+            "/usr/local/bin/chromedriver",
+            "/usr/lib/chromium-browser/chromedriver",
+        ):
+            if os.path.exists(driver_path):
+                return driver_path
+        return None
     
+    system_browser = _find_system_browser()
+    system_driver = _find_system_chromedriver()
+    if system_browser and system_driver:
+        logger.info(f"Using system browser+driver: {Path(system_browser).name}, {system_driver}")
+        driver = _try_start_driver(system_driver)
+        if driver:
+            logger.info("Chrome/Chromium driver ready")
+            return driver
+
     try:
-        logger.info("Attempting webdriver-manager installation...")
+        logger.info("System driver unavailable; trying webdriver-manager")
         wm_path = Path(ChromeDriverManager().install())
-        if wm_path.name != "chromedriver":
-            driver_path = wm_path.with_name("chromedriver")
-        else:
-            driver_path = wm_path
-        
+        driver_path = wm_path if wm_path.name == "chromedriver" else wm_path.with_name("chromedriver")
+
         if driver_path.exists():
             if not os.access(driver_path, os.X_OK):
-                logger.info(f"Setting executable permissions on {driver_path}")
                 driver_path.chmod(driver_path.stat().st_mode | 0o111)
-            
+
             driver = _try_start_driver(str(driver_path))
             if driver:
-                logger.info("=== Driver Initialization Complete (webdriver-manager) ===")
+                logger.info("Chrome/Chromium driver ready")
                 return driver
     except Exception as e:
-        logger.warning(f"webdriver-manager approach failed: {e}")
-    
-    fallback_paths = [
-        "/usr/bin/chromedriver",
-        "/usr/local/bin/chromedriver",
-        "/usr/lib/chromium-browser/chromedriver",
-    ]
-    
-    logger.info("Trying system chromedriver paths...")
-    for sys_path in fallback_paths:
-        if os.path.exists(sys_path):
-            driver = _try_start_driver(sys_path)
-            if driver:
-                logger.info(f"=== Driver Initialization Complete (system: {sys_path}) ===")
-                return driver
-        else:
-            logger.debug(f"System chromedriver not found at: {sys_path}")
-    
-    logger.error("=== CHROME/CHROMIUM DRIVER INITIALIZATION FAILED ===")
-    
+        logger.warning(f"Driver auto-install failed: {e}")
+
+    logger.error("Chrome/Chromium driver initialization failed")
+
     logger.info("Checking for installed browsers...")
     for browser_cmd in ['google-chrome', 'chromium', 'chromium-browser']:
         try:
@@ -461,7 +464,9 @@ def make_driver(headless: bool = False) -> webdriver.Chrome:
                 text=True,
                 timeout=5,
             )
-            logger.info(f"Found {browser_cmd}: {result.stdout.strip()}")
+            version = result.stdout.strip() or result.stderr.strip()
+            if version:
+                logger.info(f"Found {browser_cmd}: {version}")
         except Exception:
             logger.debug(f"{browser_cmd} not found in PATH")
     
@@ -665,12 +670,12 @@ class HybridAPIClient:
         if total > 0:
             requests_pct = (self.requests_count / total) * 100
             print(f"\n[Hybrid Stats]")
-            print(f"  Requests library: {self.requests_count} ({requests_pct:.1f}%) - FAST ⚡")
+            print(f"  Requests library: {self.requests_count} ({requests_pct:.1f}%)")
             print(f"  Selenium fallback: {self.selenium_count} ({100-requests_pct:.1f}%)")
             print(f"  Requests failures: {self.requests_failures}")
             
             if requests_pct > 90:
-                print(f"  Performance: ~10x faster than pure Selenium! 🚀")
+                print("  Performance: approximately 10x faster than pure Selenium")
 
 # ------------------------------ Scraping Helpers ------------------------------
 def auto_scroll(driver, seconds: float, steps: int):
@@ -733,15 +738,22 @@ def scrape_search_term(driver, conn: sqlite3.Connection, search_term: str,
     skipped = 0
     
     total_seeds = len(seed_ids)
-    log_every = max(1, total_seeds // 4)  # ~4 progress lines across the batch
+    log_every = max(1, total_seeds // 5)  # ~5 progress lines across the batch
+    processed = 0
+    batch_new_seeds = 0
+    batch_new_shelf = 0
+    batch_refreshed = 0
+    batch_errors = 0
+
+    def log_progress(current_index: int):
+        print(
+            f"  [Seed progress] {current_index}/{total_seeds} processed | "
+            f"new full={batch_new_seeds} | refreshed={batch_refreshed} | "
+            f"new shelf={batch_new_shelf} | errors={batch_errors}"
+        )
 
     for i, event_id in enumerate(seed_ids, 1):
         already_full = event_exists_as_full(conn, event_id)
-
-        if not already_full:
-            print(f"  [Seed {i}/{total_seeds}] {event_id} (new)")
-        elif i % log_every == 0 or i == total_seeds:
-            print(f"  [Seed {i}/{total_seeds}] ...")
 
         try:
             # Use hybrid API client (requests first, Selenium fallback)
@@ -753,8 +765,10 @@ def scrape_search_term(driver, conn: sqlite3.Connection, search_term: str,
                 save_event(conn, event_id, "full", "main", data)
                 if not already_full:
                     new_seeds += 1
+                    batch_new_seeds += 1
                 else:
                     skipped += 1  # Count as skipped for stats, but data IS updated
+                    batch_refreshed += 1
                 
                 # Extract shelf events
                 canvas = data.get("data", {}).get("canvas", {})
@@ -790,17 +804,23 @@ def scrape_search_term(driver, conn: sqlite3.Connection, search_term: str,
                                 save_event(conn, shelf_id, "shelf", "shelf", shelf_data)
                                 new_shelf += 1
                                 shelf_discovered += 1
-                
-                if shelf_discovered > 0:
-                    print(f"    -> [{i}/{total_seeds}] {event_id}: {shelf_discovered} new shelf events")
+                                batch_new_shelf += 1
                 
                 conn.commit()
                 
         except Exception as e:
-            print(f"    error: {e}")
+            batch_errors += 1
+            print(f"    error [{i}/{total_seeds}] {event_id}: {e}")
         
+        processed += 1
+        if i == 1 or i == total_seeds or i % log_every == 0:
+            log_progress(i)
+
         time.sleep(0.18)
     
+    if processed and processed % log_every != 0 and processed != total_seeds:
+        log_progress(processed)
+
     return new_seeds, new_shelf, skipped
 
 # ------------------------------ Main ------------------------------
@@ -897,8 +917,10 @@ def main():
             
             upgraded = 0
             failed_upgrades: List[dict] = []
+            progress_every = max(25, len(shelf_ids) // 10) if shelf_ids else 25
             for i, shelf_id in enumerate(shelf_ids, 1):
-                print(f"  [Upgrade {i}/{len(shelf_ids)}] {shelf_id}")
+                if i == 1 or i == len(shelf_ids) or i % progress_every == 0:
+                    print(f"  [Upgrade progress] {i}/{len(shelf_ids)}")
                 try:
                     data = api_client.fetch_event_v3(shelf_id)
                     dbg = getattr(api_client, "last_debug", None)

@@ -37,7 +37,7 @@ def ensure_adb_lanes_table(conn: sqlite3.Connection, log: logging.Logger) -> boo
         "SELECT name FROM sqlite_master WHERE type='table' AND name='adb_lanes';"
     )
     if cur.fetchone():
-        log.info("Table adb_lanes already exists; nothing to create.")
+        log.debug("Table adb_lanes already exists; nothing to create.")
         return False
 
     log.info("Creating table adb_lanes ...")
@@ -79,7 +79,7 @@ def ensure_http_deeplink_column(conn: sqlite3.Connection, log: logging.Logger) -
     columns = [row[1] for row in cur.fetchall()]
     
     if "http_deeplink_url" in columns:
-        log.info("Column playables.http_deeplink_url already exists; nothing to create.")
+        log.debug("Column playables.http_deeplink_url already exists; nothing to create.")
         return False
     
     log.info("Adding http_deeplink_url column to playables table...")
@@ -191,19 +191,25 @@ def migrate(db_path: Path) -> None:
         raise SystemExit(1)
 
     conn = sqlite3.connect(str(db_path))
+    adb_created = False
+    http_col_created = False
     try:
         # Ensure adb_lanes table
-        ensure_adb_lanes_table(conn, log)
+        adb_created = ensure_adb_lanes_table(conn, log)
         
         # Ensure http_deeplink_url column in playables
-        ensure_http_deeplink_column(conn, log)
+        http_col_created = ensure_http_deeplink_column(conn, log)
         
         # Optionally pre-populate HTTP deeplinks (safe/idempotent)
         populate_http_deeplinks(conn, log)
             
     finally:
         conn.close()
-        log.info("Migration complete.")
+        log.info(
+            "Migration complete: adb_lanes=%s, http_deeplink_url=%s",
+            "created" if adb_created else "existing",
+            "added" if http_col_created else "existing",
+        )
 
 
 def parse_args(argv: Optional[list] = None) -> argparse.Namespace:

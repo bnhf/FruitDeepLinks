@@ -8,12 +8,14 @@ auto-refresh with APScheduler
 import os
 import sys
 import json
+import logging
 import sqlite3
 import subprocess
 import threading
 import time
 import tempfile
 import requests
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import deque
@@ -131,6 +133,35 @@ log_seq = 0
 # Keep last 5000 log lines as (seq, line). seq is monotonic so streaming works even when deque is full.
 # Increased from 1000 to 5000 to accommodate full daily_refresh.py output
 log_buffer = deque(maxlen=5000)
+LOG_LEVEL_NAME = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_LEVEL_NUM = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
+REFRESH_PROGRESS_PREFIX = "__FDL_PROGRESS__"
+
+
+class SuppressNoisyAccessLogs(logging.Filter):
+    """Filter low-value successful access logs for hot polling endpoints."""
+
+    NOISY_PATHS = (
+        "GET /out/blank.m3u ",
+        "GET /out/multisource_lanes.m3u ",
+        "GET /api/status ",
+        "GET /api/logs?count=",
+        "GET /api/logs/stream?",
+    )
+
+    def filter(self, record):
+        message = record.getMessage()
+        if " 200 -" not in message:
+            return True
+        return not any(path in message for path in self.NOISY_PATHS)
+
+
+logging.getLogger("werkzeug").addFilter(SuppressNoisyAccessLogs())
+
+
+def _should_emit_log(level: str) -> bool:
+    level_num = getattr(logging, str(level).upper(), logging.INFO)
+    return level_num >= LOG_LEVEL_NUM
 
 def append_log_line(line: str) -> int:
     """Append a log line to the in-memory buffer and return its sequence number."""
@@ -143,6 +174,99 @@ def append_log_line(line: str) -> int:
         log_buffer.append((log_seq, line))
         return log_seq
 
+
+def _new_refresh_progress():
+    return {
+        "phase": "idle",
+        "started_at": None,
+        "finished_at": None,
+        "version": None,
+        "skip_scrape": False,
+        "total_steps": None,
+        "current_step_key": None,
+        "current_step_label": None,
+        "current_step_status": None,
+        "current_detail": None,
+        "completed_steps": [],
+    }
+
+
+def _trim_completed_steps(steps, limit=8):
+    if len(steps) > limit:
+        del steps[:-limit]
+
+
+def _consume_refresh_progress_marker(line: str):
+    if not line.startswith(REFRESH_PROGRESS_PREFIX):
+        return False
+
+    payload_raw = line[len(REFRESH_PROGRESS_PREFIX):]
+    try:
+        payload = json.loads(payload_raw)
+    except Exception:
+        return False
+
+    progress = refresh_status.setdefault("progress", _new_refresh_progress())
+    event = payload.get("event")
+
+    if event == "refresh_start":
+        refresh_status["progress"] = _new_refresh_progress()
+        progress = refresh_status["progress"]
+        progress["phase"] = "running"
+        progress["started_at"] = payload.get("started_at")
+        progress["version"] = payload.get("version")
+        progress["skip_scrape"] = bool(payload.get("skip_scrape"))
+        progress["total_steps"] = payload.get("total_steps")
+        refresh_status["current_step"] = "Starting refresh..."
+        return True
+
+    if event == "step_start":
+        progress["phase"] = "running"
+        progress["current_step_key"] = payload.get("step")
+        progress["current_step_label"] = payload.get("description")
+        progress["current_step_status"] = "running"
+        progress["current_detail"] = None
+        progress["total_steps"] = payload.get("total_steps") or progress.get("total_steps")
+        refresh_status["current_step"] = f"[{payload.get('step')}/{progress.get('total_steps')}] {payload.get('description')}"
+        return True
+
+    if event == "step_done":
+        step_record = {
+            "step": payload.get("step"),
+            "label": payload.get("description"),
+            "status": payload.get("status"),
+        }
+        if payload.get("exit_code") is not None:
+            step_record["exit_code"] = payload.get("exit_code")
+        progress["completed_steps"].append(step_record)
+        _trim_completed_steps(progress["completed_steps"])
+        progress["current_step_status"] = payload.get("status")
+        progress["current_detail"] = None
+        return True
+
+    if event == "refresh_done":
+        progress["phase"] = payload.get("status", "success")
+        progress["finished_at"] = payload.get("finished_at")
+        progress["duration_seconds"] = payload.get("duration_seconds")
+        progress["current_step_status"] = payload.get("status")
+        return True
+
+    return True
+
+
+def _update_refresh_progress_detail(line: str):
+    progress = refresh_status.get("progress")
+    if not progress or progress.get("phase") != "running":
+        return
+    stripped = (line or "").strip()
+    if not stripped:
+        return
+    if stripped.startswith("=") or stripped == "FruitDeepLinks Daily Refresh":
+        return
+    if stripped.startswith("[OK] Step "):
+        return
+    progress["current_detail"] = stripped
+
 refresh_status = {
     "running": False,
     "last_run": None,
@@ -152,6 +276,7 @@ refresh_status = {
     "last_status_manual": None,
     "last_run_auto": None,
     "last_status_auto": None,
+    "progress": _new_refresh_progress(),
 }
 
 # APScheduler globals
@@ -184,6 +309,8 @@ log_capture = LogCapture()
 
 def log(message, level="INFO"):
     """Add a log message"""
+    if not _should_emit_log(level):
+        return
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_line = f"[{timestamp}] [{level}] {message}"
     append_log_line(log_line)
@@ -1295,8 +1422,11 @@ def run_refresh(skip_scrape=False, source="manual"):
 
     refresh_status["running"] = True
     refresh_status["current_step"] = "Starting refresh..."
+    refresh_status["progress"] = _new_refresh_progress()
+    refresh_status["progress"]["phase"] = "starting"
     label = "Auto" if source == "auto" else "Manual"
     log(f"{label} refresh triggered (skip_scrape={skip_scrape})", "INFO")
+    log(f"FruitDeepLinks version: {get_version()}", "INFO")
 
     outcome = "error"
 
@@ -1317,26 +1447,33 @@ def run_refresh(skip_scrape=False, source="manual"):
             line = line.rstrip("\n")
             if not line:
                 continue
+            if _consume_refresh_progress_marker(line):
+                continue
             append_log_line(line)
-            # Try to surface step info like "[1/5] ..."
-            if "[" in line and "/" in line and "]" in line:
+            # Only treat real step headers like "[1/15] Label" as the current step.
+            if re.match(r"^\[[^\]]+/\d+\]\s+", line.strip()):
                 refresh_status["current_step"] = line.strip()
+            _update_refresh_progress_detail(line)
 
         process.wait()
 
         if process.returncode == 0:
             outcome = "success"
+            refresh_status["progress"]["phase"] = "success"
             log(f"{label} refresh completed successfully", "INFO")
         else:
             outcome = "failed"
+            refresh_status["progress"]["phase"] = "failed"
             log(f"{label} refresh failed with code {process.returncode}", "ERROR")
 
     except Exception as e:
         outcome = "error"
+        refresh_status["progress"]["phase"] = "error"
         log(f"{label} refresh error: {e}", "ERROR")
     finally:
         refresh_status["running"] = False
         refresh_status["current_step"] = None
+        refresh_status["progress"]["finished_at"] = datetime.now().isoformat()
         now_iso = datetime.now().isoformat()
 
         # Overall last run
@@ -1619,7 +1756,7 @@ def trigger_playback_on_client(client_ip: str, deeplink: str, lane_number: int, 
         if play_resp.status_code == 200:
             result["playback_triggered"] = True
             if title and service:
-                log(f"✓ Launched '{title}' on {service} (client: {client_ip})", "INFO")
+                log(f"Launched '{title}' on {service} (client: {client_ip})", "INFO")
             else:
                 log(f"Successfully triggered deeplink on {client_ip}", "INFO")
         else:
@@ -1647,7 +1784,7 @@ def auto_detect_and_trigger(lane_number: int, hint_client_ip: str, self_base_url
             return
 
         clients = resp.json() or []
-        log(f"Detector: clients returned={len(clients)} hint_ip={hint_client_ip}", "INFO")
+        log(f"Detector: clients returned={len(clients)} hint_ip={hint_client_ip}", "DEBUG")
 
         def has_api_support(platform_str: str) -> bool:
             if not platform_str:
@@ -1672,7 +1809,7 @@ def auto_detect_and_trigger(lane_number: int, hint_client_ip: str, self_base_url
             c for c in clients if has_api_support(c.get("platform", ""))
         ]
 
-        log(f"Detector: candidates={len(candidates)} (recent={len(recent)})", "INFO")
+        log(f"Detector: candidates={len(candidates)} (recent={len(recent)})", "DEBUG")
 
         for client in candidates:
             client_ip = client.get("local_ip")
@@ -1692,7 +1829,6 @@ def auto_detect_and_trigger(lane_number: int, hint_client_ip: str, self_base_url
                 channel = status.get("channel") or {}
                 ch_name = channel.get("name") or ""
 
-                import re
                 lane_match = re.search(r"(\d+)\s*$", ch_name)
                 if not lane_match:
                     continue
@@ -1701,14 +1837,14 @@ def auto_detect_and_trigger(lane_number: int, hint_client_ip: str, self_base_url
                 if detected_lane != int(lane_number):
                     continue
 
-                log(f"Detector: matched lane={lane_number} client={client_ip} ch='{ch_name}'", "INFO")
+                log(f"Detector: matched lane={lane_number} client={client_ip} ch='{ch_name}'", "DEBUG")
                 
                 # Detect platform and choose deeplink format
                 platform = client.get("platform", "").lower()
                 is_android = any(x in platform for x in ["android", "firetv"])
                 deeplink_format = "http" if is_android else "scheme"
                 
-                log(f"Detector: client platform={platform}, using deeplink_format={deeplink_format}", "INFO")
+                log(f"Detector: client platform={platform}, using deeplink_format={deeplink_format}", "DEBUG")
 
                 deeplink_info = get_deeplink_for_lane(int(lane_number), self_base_url, deeplink_format)
                 if not deeplink_info:
@@ -2596,7 +2732,7 @@ def api_wipe_event_data():
                         amazon_deleted.append("amazon_channel_history")
                     
                     if amazon_deleted:
-                        log(f"✓ Deleted Amazon data: {', '.join(amazon_deleted)}", "INFO")
+                        log(f"Deleted Amazon data: {', '.join(amazon_deleted)}", "INFO")
                     
                     # Reset sqlite_sequence for auto-increment tables (only if they exist)
                     if table_exists("sqlite_sequence"):
@@ -2605,10 +2741,10 @@ def api_wipe_event_data():
                         if sequence_tables:
                             placeholders = ','.join(['?' for _ in sequence_tables])
                             cur.execute(f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})", sequence_tables)
-                            log(f"✓ Reset auto-increment for: {', '.join(sequence_tables)}", "INFO")
+                            log(f"Reset auto-increment for: {', '.join(sequence_tables)}", "INFO")
                     
                     conn.commit()
-                    log(f"✅ Wiped {stats['events_deleted']} events, {stats['playables_deleted']} playables, {stats['lanes_deleted']} lanes", "INFO")
+                    log(f"Wiped {stats['events_deleted']} events, {stats['playables_deleted']} playables, {stats['lanes_deleted']} lanes", "INFO")
                     
                 except Exception as e:
                     conn.rollback()
@@ -2633,7 +2769,7 @@ def api_wipe_event_data():
                     new_size = fruit_db.stat().st_size
                     size_diff = original_size - new_size
                     size_diff_mb = size_diff / (1024 * 1024)
-                    log(f"✅ Database compacted - freed {size_diff_mb:.2f} MB", "INFO")
+                    log(f"Database compacted - freed {size_diff_mb:.2f} MB", "INFO")
                     stats["space_freed_mb"] = round(size_diff_mb, 2)
                 except Exception as e:
                     error_msg = f"Error vacuuming database: {str(e)}"
@@ -2646,7 +2782,7 @@ def api_wipe_event_data():
                 log(f"Deleting Amazon GTI cache: {amazon_cache}", "INFO")
                 try:
                     amazon_cache.unlink()
-                    log("✅ Deleted Amazon GTI cache", "INFO")
+                    log("Deleted Amazon GTI cache", "INFO")
                 except Exception as e:
                     error_msg = f"Error deleting Amazon cache: {str(e)}"
                     log(error_msg, "WARNING")
@@ -2664,9 +2800,9 @@ def api_wipe_event_data():
                     if cur.fetchone():
                         cur.execute("DELETE FROM apple_events")
                         conn.commit()
-                        log("✅ Wiped apple_events.db cache", "INFO")
+                        log("Wiped apple_events.db cache", "INFO")
                     else:
-                        log("⚠️ apple_events table not found in apple_events.db", "WARNING")
+                        log("apple_events table not found in apple_events.db", "WARNING")
                     conn.close()
                 except Exception as e:
                     error_msg = f"Error wiping apple_events.db: {str(e)}"
@@ -2687,9 +2823,9 @@ def api_wipe_event_data():
                         for table in existing_tables:
                             cur.execute(f"DELETE FROM {table}")
                         conn.commit()
-                        log(f"✅ Wiped espn_graph.db cache ({', '.join(existing_tables)})", "INFO")
+                        log(f"Wiped espn_graph.db cache ({', '.join(existing_tables)})", "INFO")
                     else:
-                        log("⚠️ No expected tables found in espn_graph.db", "WARNING")
+                        log("No expected tables found in espn_graph.db", "WARNING")
                     conn.close()
                 except Exception as e:
                     error_msg = f"Error wiping espn_graph.db: {str(e)}"
@@ -2698,10 +2834,10 @@ def api_wipe_event_data():
             
             if stats["errors"]:
                 refresh_status["last_status"] = "completed_with_errors"
-                log(f"⚠️ Wipe completed with {len(stats['errors'])} errors", "WARNING")
+                log(f"Wipe completed with {len(stats['errors'])} errors", "WARNING")
             else:
                 refresh_status["last_status"] = "success"
-                log("✅ Database wipe completed successfully!", "INFO")
+                log("Database wipe completed successfully", "INFO")
             
         except Exception as e:
             refresh_status["last_status"] = "error"
@@ -4539,7 +4675,7 @@ def serve_lane_hls(lane_number):
     ua = request.headers.get("User-Agent", "-")
     self_base_url = request.host_url.rstrip("/")  # e.g. http://192.168.86.80:6655
 
-    log(f"LANE_HIT lane={lane_number} remote={remote} ua={ua}", "INFO")
+    log(f"LANE_HIT lane={lane_number} remote={remote} ua={ua}", "DEBUG")
 
     # Debounce detector spawns per-lane (CDVR often re-requests the playlist quickly)
     spawn = True
@@ -4556,7 +4692,7 @@ def serve_lane_hls(lane_number):
 
     def delayed_detect(lane: int, hint_ip: str, base_url: str):
         time.sleep(2)
-        log(f"DETECTOR_START lane={lane}", "INFO")
+        log(f"DETECTOR_START lane={lane}", "DEBUG")
         try:
             auto_detect_and_trigger(lane, hint_ip, base_url)
         except Exception as e:
@@ -4618,6 +4754,7 @@ def serve_segment(lane_number):
 # ==================== Main ====================
 if __name__ == "__main__":
     log("FruitDeepLinks server starting...", "INFO")
+    log(f"FruitDeepLinks version: {get_version()}", "INFO")
 
     port = int(os.getenv("PORT", 6655))
     host = os.getenv("HOST", "0.0.0.0")

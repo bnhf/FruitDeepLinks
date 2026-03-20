@@ -32,6 +32,12 @@ DATA_DIR.mkdir(exist_ok=True)
 
 # Apple import stamping (lets --skip-scrape be fast by skipping Step 6 when Apple DB unchanged)
 APPLE_IMPORT_STAMP_PATH = DATA_DIR / ".apple_import_stamp.json"
+PROGRESS_PREFIX = "__FDL_PROGRESS__"
+
+
+def emit_progress(event: str, **fields):
+    payload = {"event": event, **fields}
+    print(f"{PROGRESS_PREFIX}{json.dumps(payload, separators=(',', ':'))}")
 
 def _load_json(path: Path):
     try:
@@ -272,6 +278,12 @@ def _vacuum_now(db_path: Path, label: str) -> bool:
 
 def run_step(step_num, total_steps, description, command, allow_fail: bool = False, env: dict = None):
     """Run a pipeline step and handle errors"""
+    emit_progress(
+        "step_start",
+        step=str(step_num),
+        total_steps=total_steps,
+        description=description,
+    )
     print(f"\n{'=' * 60}")
     print(f"[{step_num}/{total_steps}] {description}")
     print(f"{'=' * 60}")
@@ -289,12 +301,35 @@ def run_step(step_num, total_steps, description, command, allow_fail: bool = Fal
             capture_output=False,
             env=step_env,
         )
+        emit_progress(
+            "step_done",
+            step=str(step_num),
+            total_steps=total_steps,
+            description=description,
+            status="ok",
+        )
         print(f"[OK] Step {step_num} complete")
         return True
     except subprocess.CalledProcessError as e:
         if allow_fail:
+            emit_progress(
+                "step_done",
+                step=str(step_num),
+                total_steps=total_steps,
+                description=description,
+                status="failed_nonfatal",
+                exit_code=e.returncode,
+            )
             print(f"⚠ Step {step_num} FAILED (non-fatal) with exit code {e.returncode}")
             return False
+        emit_progress(
+            "step_done",
+            step=str(step_num),
+            total_steps=total_steps,
+            description=description,
+            status="failed",
+            exit_code=e.returncode,
+        )
         print(f"[ERROR] Step {step_num} FAILED with exit code {e.returncode}")
         return False
 
@@ -371,6 +406,13 @@ def main(argv=None):
 
     # Total steps in this pipeline (updated for beIN Sports)
     total_steps = 15  # Was 13, now 15 (added beIN scrape + import)
+    emit_progress(
+        "refresh_start",
+        total_steps=total_steps,
+        started_at=start_time.isoformat(),
+        version=get_version(),
+        skip_scrape=args.skip_scrape,
+    )
 
     # Get flags from parsed arguments
     skip_scrape = args.skip_scrape
@@ -1027,6 +1069,12 @@ def main(argv=None):
     print(f"Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Duration: {duration:.1f} seconds")
     print("=" * 60)
+    emit_progress(
+        "refresh_done",
+        status="success",
+        finished_at=end_time.isoformat(),
+        duration_seconds=round(duration, 1),
+    )
 
     return 0
 

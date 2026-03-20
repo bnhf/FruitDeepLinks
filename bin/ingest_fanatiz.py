@@ -52,6 +52,7 @@ class FanatizIngestor:
             'errors': 0
         }
         self.skip_samples: List[str] = []
+        self.timestamp_parse_failures = set()
     
     def ingest_from_file(self, json_path: str):
         """
@@ -458,7 +459,10 @@ class FanatizIngestor:
             dt = datetime.fromisoformat(utc_str.replace('Z', '+00:00'))
             return int(dt.timestamp() * 1000)
         except Exception as e:
-            logger.error(f"Error parsing timestamp {utc_str}: {e}")
+            key = (utc_str, str(e))
+            if key not in self.timestamp_parse_failures:
+                self.timestamp_parse_failures.add(key)
+                logger.error(f"Error parsing timestamp {utc_str}: {e}")
             return None
     
     def _log_stats(self):

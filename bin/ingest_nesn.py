@@ -47,9 +47,9 @@ class NesinIngestAdapter:
         try:
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
-            logger.info(f"✓ Connected to database: {self.db_path}")
+            logger.info(f"Connected to database: {self.db_path}")
         except sqlite3.Error as e:
-            logger.error(f"✗ Failed to connect to database: {e}")
+            logger.error(f"Failed to connect to database: {e}")
             sys.exit(1)
     
     def close(self):
@@ -57,7 +57,7 @@ class NesinIngestAdapter:
         if self.conn:
             self.conn.commit()
             self.conn.close()
-            logger.info("✓ Database connection closed")
+            logger.info("Database connection closed")
     
     def verify_schema(self):
         """Verify required tables exist"""
@@ -65,18 +65,18 @@ class NesinIngestAdapter:
             # Check events table
             self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
             if not self.cursor.fetchone():
-                logger.error("✗ 'events' table not found")
+                logger.error("'events' table not found")
                 sys.exit(1)
             
             # Check playables table
             self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='playables'")
             if not self.cursor.fetchone():
-                logger.error("✗ 'playables' table not found")
+                logger.error("'playables' table not found")
                 sys.exit(1)
             
-            logger.info("✓ Schema verified")
+            logger.info("Schema verified")
         except sqlite3.Error as e:
-            logger.error(f"✗ Schema verification failed: {e}")
+            logger.error(f"Schema verification failed: {e}")
             sys.exit(1)
     
     def generate_deeplinks(self, normalized: Dict) -> Dict[str, str]:
@@ -248,7 +248,7 @@ class NesinIngestAdapter:
             return True
         
         except sqlite3.Error as e:
-            logger.error(f"✗ Failed to insert/update event {normalized['id']}: {e}")
+            logger.error(f"Failed to insert/update event {normalized['id']}: {e}")
             return False
     
     def insert_playables(self, event_id: str, deeplinks: Dict) -> bool:
@@ -343,7 +343,7 @@ class NesinIngestAdapter:
             return True
         
         except sqlite3.Error as e:
-            logger.error(f"✗ Failed to insert playables for {event_id}: {e}")
+            logger.error(f"Failed to insert playables for {event_id}: {e}")
             return False
     
     def ingest(self, nesn_json_path: str) -> Tuple[int, int]:
@@ -356,7 +356,7 @@ class NesinIngestAdapter:
         Returns:
             Tuple of (events_inserted, playables_inserted)
         """
-        logger.info(f"=== NESN Ingest Starting ===")
+        logger.info("NESN ingest starting")
         logger.info(f"Reading from: {nesn_json_path}")
         
         # Read scraped data
@@ -364,7 +364,7 @@ class NesinIngestAdapter:
             with open(nesn_json_path, 'r', encoding='utf-8') as f:
                 scraped_data = json.load(f)
         except Exception as e:
-            logger.error(f"✗ Failed to read {nesn_json_path}: {e}")
+            logger.error(f"Failed to read {nesn_json_path}: {e}")
             sys.exit(1)
         
         events = scraped_data.get("events", [])
@@ -408,12 +408,12 @@ class NesinIngestAdapter:
         # Commit changes
         try:
             self.conn.commit()
-            logger.info(f"✓ Database committed")
+            logger.info("Database committed")
         except sqlite3.Error as e:
-            logger.error(f"✗ Failed to commit: {e}")
+            logger.error(f"Failed to commit: {e}")
             sys.exit(1)
         
-        logger.info(f"\n=== Ingest Summary ===")
+        logger.info("Ingest summary")
         logger.info(f"Events inserted/updated: {events_inserted}")
         logger.info(f"Playables created: {playables_inserted}")
         
@@ -447,7 +447,7 @@ def main():
     finally:
         adapter.close()
     
-    logger.info(f"\n=== Ingest Complete ===")
+    logger.info("Ingest complete")
 
 
 if __name__ == "__main__":
