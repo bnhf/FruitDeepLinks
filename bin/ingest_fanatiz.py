@@ -48,8 +48,10 @@ class FanatizIngestor:
             'events_updated': 0,
             'playables_inserted': 0,
             'images_inserted': 0,
+            'old_events_skipped': 0,
             'errors': 0
         }
+        self.skip_samples: List[str] = []
     
     def ingest_from_file(self, json_path: str):
         """
@@ -87,6 +89,12 @@ class FanatizIngestor:
             raise
         
         self._log_stats()
+
+    def _record_old_event_skip(self, message: str):
+        """Track skipped old events without flooding the logs."""
+        self.stats['old_events_skipped'] += 1
+        if len(self.skip_samples) < 5:
+            self.skip_samples.append(message)
     
     def _ingest_event(self, event: Dict):
         """
@@ -110,7 +118,9 @@ class FanatizIngestor:
                 
                 # Skip events that started 2+ days ago with no end time
                 if days_since_start > 2 and not end_utc:
-                    logger.info(f"Skipping old event {event_id} (started {days_since_start:.1f} days ago, no end time)")
+                    self._record_old_event_skip(
+                        f"{event_id} (started {days_since_start:.1f} days ago, no end time)"
+                    )
                     return
                 
                 # Skip events that ENDED more than 1 day ago
@@ -119,7 +129,9 @@ class FanatizIngestor:
                         end_dt = datetime.fromisoformat(end_utc.replace('Z', '+00:00'))
                         days_since_end = (datetime.now(timezone.utc) - end_dt).total_seconds() / 86400
                         if days_since_end > 1:
-                            logger.info(f"Skipping old event {event_id} (ended {days_since_end:.1f} days ago)")
+                            self._record_old_event_skip(
+                                f"{event_id} (ended {days_since_end:.1f} days ago)"
+                            )
                             return
                     except (ValueError, AttributeError):
                         pass  # If parsing fails, import anyway
@@ -457,6 +469,9 @@ class FanatizIngestor:
         logger.info(f"  Events updated: {self.stats['events_updated']}")
         logger.info(f"  Playables inserted: {self.stats['playables_inserted']}")
         logger.info(f"  Images inserted: {self.stats['images_inserted']}")
+        logger.info(f"  Old events skipped: {self.stats['old_events_skipped']}")
+        if self.skip_samples:
+            logger.info("  Old event skip samples: %s", "; ".join(self.skip_samples))
         logger.info(f"  Errors: {self.stats['errors']}")
     
     def close(self):
