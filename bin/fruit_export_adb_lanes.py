@@ -252,6 +252,15 @@ def export_adb_lanes(db_path: Path, out_dir: Path, server_url: str) -> Path:
         channels = cur.fetchall()
         log.info("Found %d distinct ADB channels.", len(channels))
 
+        # Load logo URLs from provider_lanes (if column exists)
+        provider_logo_urls: Dict[str, Optional[str]] = {}
+        try:
+            cur.execute("SELECT provider_code, logo_url FROM provider_lanes WHERE logo_url IS NOT NULL AND logo_url != ''")
+            for row in cur.fetchall():
+                provider_logo_urls[row["provider_code"]] = row["logo_url"]
+        except Exception:
+            pass  # logo_url column may not exist on older installs
+
         # Build programmes: join adb_lanes -> events for titles / synopses
         # We assume events.id, events.start_utc, events.end_utc, events.title, events.synopsis
         cur.execute(
@@ -291,6 +300,12 @@ def export_adb_lanes(db_path: Path, out_dir: Path, server_url: str) -> Path:
             display_name = f"{provider_display} {int(lane_number):02d}"
             dn_el = ET.SubElement(ch_el, "display-name")
             dn_el.text = display_name
+
+            # Provider logo icon (optional, set via ADB Configuration page)
+            logo_url = provider_logo_urls.get(provider_code)
+            if logo_url:
+                icon_el = ET.SubElement(ch_el, "icon")
+                icon_el.set("src", logo_url)
 
         # Programmes with placeholders and rich categories
         # Group rows by channel so we can fill gaps per-lane.
