@@ -346,6 +346,48 @@ def _is_nonempty_json_object(path: Path) -> bool:
         return False
 
 
+def _get_enabled_services_from_db(db_path: Path) -> list:
+    """Read enabled_services from user_preferences table.
+
+    Returns an empty list if the DB doesn't exist yet, the table is missing,
+    or no explicit filter has been saved (empty list = all services enabled).
+    """
+    try:
+        if not db_path.exists():
+            return []
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        cur = conn.cursor()
+        cur.execute("PRAGMA busy_timeout=3000;")
+        cur.execute("SELECT value FROM user_preferences WHERE key='enabled_services'")
+        row = cur.fetchone()
+        conn.close()
+        if row and row[0]:
+            val = json.loads(row[0])
+            if isinstance(val, list):
+                return val
+        return []
+    except Exception:
+        return []
+
+
+def _scraper_enabled(env_var: str, logical_services: list, enabled_services: list) -> bool:
+    """Decide whether a dedicated scraper should run.
+
+    Priority order:
+    1. Env var set to false/0/no  → disabled (explicit override)
+    2. enabled_services is non-empty AND none of the scraper's logical service
+       codes appear in it  → disabled (user filtered them all out)
+    3. Otherwise → enabled
+    """
+    env_val = os.getenv(env_var, "true").lower()
+    if env_val in ("0", "false", "no"):
+        return False
+    if enabled_services:  # non-empty means an explicit filter is active
+        if not any(s in enabled_services for s in logical_services):
+            return False
+    return True
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="FruitDeepLinks daily refresh pipeline")
     parser.add_argument(
@@ -418,6 +460,13 @@ def main(argv=None):
     skip_scrape = args.skip_scrape
     force_apple_import = args.force_apple_import
 
+    # Read enabled_services from DB so we can skip scraping for disabled services.
+    # An empty list means "all services enabled" (no filter saved yet).
+    enabled_services = _get_enabled_services_from_db(DB_PATH)
+    if enabled_services:
+        print(f"[scraper-config] Active service filter: {len(enabled_services)} services enabled — "
+              "dedicated scrapers for disabled services will be skipped.")
+
     # Fresh-install defensive step: bootstrap Apple UTS auth tokens if missing/invalid.
     # Prevents brand new installs from failing with:
     #   ERROR: No cached auth tokens found ... /app/data/apple_uts_auth.json
@@ -476,12 +525,14 @@ def main(argv=None):
     # Step 2: Scrape Kayo Sports
     kayo_days = os.getenv("KAYO_DAYS", "7")
     kayo_json = OUT_DIR / "kayo_raw.json"
+    kayo_enabled = _scraper_enabled("KAYO_ENABLED", ["kayo_web", "kayo"], enabled_services)
 
-    if skip_scrape:
+    if skip_scrape or not kayo_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[2/{total_steps}] Scraping Kayo Sports ({kayo_days} days). SKIPPED")
+        print(f"[2/{total_steps}] Scraping Kayo Sports ({kayo_days} days). {reason}")
         print("=" * 60)
-        if not kayo_json.exists():
+        if skip_scrape and not kayo_json.exists():
             print(f"WARNING: --skip-scrape set but {kayo_json} not found; Kayo ingest will be skipped.")
     else:
         if not run_step(2, total_steps, f"Scraping Kayo Sports ({kayo_days} days)", [
@@ -494,12 +545,14 @@ def main(argv=None):
     # Step 2a: Scrape Fanatiz Soccer
     # Note: No --days filter - Fanatiz returns ~1,300 future events (full season, ~10 months)
     fanatiz_json = OUT_DIR / "fanatiz_raw.json"
+    fanatiz_enabled = _scraper_enabled("FANATIZ_ENABLED", ["fanatiz_web", "fanatiz"], enabled_services)
 
-    if skip_scrape:
+    if skip_scrape or not fanatiz_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[2a/{total_steps}] Scraping Fanatiz Soccer (all future events). SKIPPED")
+        print(f"[2a/{total_steps}] Scraping Fanatiz Soccer (all future events). {reason}")
         print("=" * 60)
-        if not fanatiz_json.exists():
+        if skip_scrape and not fanatiz_json.exists():
             print(f"WARNING: --skip-scrape set but {fanatiz_json} not found; Fanatiz ingest will be skipped.")
     else:
         if not run_step("2a", total_steps, "Scraping Fanatiz Soccer (all future events)", [
@@ -510,12 +563,14 @@ def main(argv=None):
 
     # Step 2b: Scrape beIN Sports
     bein_json = OUT_DIR / "bein_snapshot.json"
-    
-    if skip_scrape:
+    bein_enabled = _scraper_enabled("BEIN_ENABLED", ["bein"], enabled_services)
+
+    if skip_scrape or not bein_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[2b/{total_steps}] Scraping beIN Sports EPG. SKIPPED")
+        print(f"[2b/{total_steps}] Scraping beIN Sports EPG. {reason}")
         print("=" * 60)
-        if not bein_json.exists():
+        if skip_scrape and not bein_json.exists():
             print(f"WARNING: --skip-scrape set but {bein_json} not found; beIN ingest will be skipped.")
     else:
         if not run_step("2b", total_steps, "Scraping beIN Sports EPG", [
@@ -527,12 +582,14 @@ def main(argv=None):
     # Step 2c: Scrape NESN (New England Sports Network)
     nesn_days = os.getenv("NESN_DAYS", "7")
     nesn_json = OUT_DIR / "nesn_raw.json"
+    nesn_enabled = _scraper_enabled("NESN_ENABLED", ["nesn"], enabled_services)
 
-    if skip_scrape:
+    if skip_scrape or not nesn_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[2c/{total_steps}] Scraping NESN ({nesn_days} days). SKIPPED")
+        print(f"[2c/{total_steps}] Scraping NESN ({nesn_days} days). {reason}")
         print("=" * 60)
-        if not nesn_json.exists():
+        if skip_scrape and not nesn_json.exists():
             print(f"WARNING: --skip-scrape set but {nesn_json} not found; NESN ingest will be skipped.")
     else:
         if not run_step("2c", total_steps, f"Scraping NESN ({nesn_days} days)", [
@@ -748,9 +805,12 @@ def main(argv=None):
     # Step 7a: Scrape Victory+ events
     # Victory+ uses guest authentication (no user credentials required)
     # Session is cached in the database, so authentication only happens once
-    if skip_scrape:
+    victory_enabled = _scraper_enabled("VICTORY_ENABLED", ["victory"], enabled_services)
+
+    if skip_scrape or not victory_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[7a/{total_steps}] Scraping Victory+ events. SKIPPED")
+        print(f"[7a/{total_steps}] Scraping Victory+ events. {reason}")
         print("=" * 60)
     else:
         print("\n" + "=" * 60)
@@ -766,41 +826,43 @@ def main(argv=None):
     # Step 7a-gotham: Scrape Gotham Sports (MSG/YES Network)
     # Self-contained scraper that handles both scraping and ingestion
     # NYC regional sports: Knicks, Rangers, Islanders, Devils, Yankees, Nets
-    if skip_scrape:
+    gotham_enabled = _scraper_enabled("GOTHAM_ENABLED", ["gotham"], enabled_services)
+
+    if skip_scrape or not gotham_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (env var or service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[7a-gotham/{total_steps}] Scraping Gotham Sports. SKIPPED")
+        print(f"[7a-gotham/{total_steps}] Scraping Gotham Sports. {reason}")
         print("=" * 60)
+        if not skip_scrape:
+            print("Set GOTHAM_ENABLED=true (or enable Gotham Sports in Filter & Settings) to enable")
     else:
-        gotham_enabled = os.getenv("GOTHAM_ENABLED", "true").lower() not in ("0", "false", "no")
-        if gotham_enabled:
-            gotham_days = os.getenv("GOTHAM_DAYS", "7")
-            gotham_zone = os.getenv("GOTHAM_ZONE", "zone-1")
-            print("\n" + "=" * 60)
-            print(f"[7a-gotham/{total_steps}] Scraping Gotham Sports (MSG/YES - {gotham_days} days)")
-            print("=" * 60)
-            # Gotham scrape is non-fatal - don't stop pipeline if it fails
-            # The scraper handles import internally (no separate ingest step needed)
-            run_step("7a-gotham", total_steps, f"Scraping Gotham Sports ({gotham_zone}, {gotham_days} days)", [
-                "python3", "gotham_integration.py",
-                "--db", str(DB_PATH),
-                "--days", gotham_days,
-                "--zone", gotham_zone,
-            ], allow_fail=True)
-        else:
-            print("\n" + "=" * 60)
-            print(f"[7a-gotham/{total_steps}] Scraping Gotham Sports. DISABLED")
-            print("=" * 60)
-            print("Set GOTHAM_ENABLED=true to enable")
+        gotham_days = os.getenv("GOTHAM_DAYS", "7")
+        gotham_zone = os.getenv("GOTHAM_ZONE", "zone-1")
+        print("\n" + "=" * 60)
+        print(f"[7a-gotham/{total_steps}] Scraping Gotham Sports (MSG/YES - {gotham_days} days)")
+        print("=" * 60)
+        # Gotham scrape is non-fatal - don't stop pipeline if it fails
+        # The scraper handles import internally (no separate ingest step needed)
+        run_step("7a-gotham", total_steps, f"Scraping Gotham Sports ({gotham_zone}, {gotham_days} days)", [
+            "python3", "gotham_integration.py",
+            "--db", str(DB_PATH),
+            "--days", gotham_days,
+            "--zone", gotham_zone,
+        ], allow_fail=True)
 
     # Step 7b: Scrape ESPN Watch Graph (skippable, runs after Apple TV import)
     espn_days = os.getenv("ESPN_DAYS", "7")
     espn_db = DATA_DIR / "espn_graph.db"
-    
-    if skip_scrape:
+    espn_scrape_enabled = _scraper_enabled(
+        "ESPN_ENABLED", ["espn_plus", "espn_linear"], enabled_services
+    )
+
+    if skip_scrape or not espn_scrape_enabled:
+        reason = "SKIPPED" if skip_scrape else "DISABLED (service not in enabled list)"
         print("\n" + "=" * 60)
-        print(f"[7b/{total_steps}] Scraping ESPN Watch Graph ({espn_days} days). SKIPPED")
+        print(f"[7b/{total_steps}] Scraping ESPN Watch Graph ({espn_days} days). {reason}")
         print("=" * 60)
-        if not espn_db.exists():
+        if skip_scrape and not espn_db.exists():
             print(f"WARNING: --skip-scrape set but {espn_db} not found; ESPN enrichment will be skipped.")
     else:
         print("\n" + "=" * 60)

@@ -356,7 +356,8 @@ font-style: italic;
 <h2>📺 Streaming Services</h2>
 <p class="section-description">
 Select which streaming services you have subscriptions to. Only events available on your selected services will be included in generated playlists.
-<strong>Green = Enabled</strong> (will be included) | <strong>Red = Disabled</strong> (will be excluded)
+<strong>Green = Enabled</strong> (will be included) | <strong>Red = Disabled</strong> (will be excluded)<br>
+Services marked <strong>🔄</strong> have dedicated scrapers — disabling them will also skip their scraper on the next refresh, saving time.
 </p>
 <div id="providers-loading" class="loading">Loading services...</div>
 <div id="providers-grid" class="filter-grid" style="display: none;"></div>
@@ -698,6 +699,17 @@ loadSelectionExamples(); // Refresh examples
 }
 });
 
+// Services that have dedicated scrapers — disabling them skips scraping on next refresh
+const SCRAPER_CONTROLLED_SERVICES = new Set([
+'kayo_web', 'kayo',
+'fanatiz_web', 'fanatiz',
+'bein',
+'nesn',
+'victory',
+'gotham',
+'espn_plus', 'espn_linear',
+]);
+
 function renderProviders() {
 const grid = document.getElementById('providers-grid');
 const loading = document.getElementById('providers-loading');
@@ -709,12 +721,15 @@ return;
 
 grid.innerHTML = availableFilters.providers.map(provider => {
 const isEnabled = currentPreferences.enabled_services.includes(provider.scheme);
+const scraperBadge = SCRAPER_CONTROLLED_SERVICES.has(provider.scheme)
+  ? ' <span title="Has dedicated scraper — disabling skips scraping on next refresh" style="font-size:11px; opacity:0.8;">🔄</span>'
+  : '';
 return `
-<div class="filter-item ${isEnabled ? 'enabled' : 'disabled'}" 
+<div class="filter-item ${isEnabled ? 'enabled' : 'disabled'}"
 onclick="toggleProvider('${provider.scheme}')">
 <div class="checkbox"></div>
 <div class="filter-info">
-<div class="filter-name">${provider.name}</div>
+<div class="filter-name">${provider.name}${scraperBadge}</div>
 <div class="filter-count">${provider.count} events</div>
 </div>
 </div>
