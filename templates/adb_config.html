@@ -100,8 +100,7 @@ width: 18px;
 height: 18px;
 cursor: pointer;
 }
-.provider-lanes-table input[type="url"],
-.provider-lanes-table input[type="text"].logo-url-input {
+.provider-lanes-table input[type="url"].logo-url-input {
 width: 100%;
 min-width: 180px;
 padding: 6px 8px;
@@ -352,7 +351,7 @@ class="adb-lane-count-input"
 value="${p.adb_lane_count || 0}">
 </td>
 <td>
-<input type="text"
+<input type="url"
 class="logo-url-input"
 data-provider="${p.provider_code}"
 placeholder="https://example.com/logo.png"

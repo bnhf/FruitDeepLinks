@@ -252,14 +252,17 @@ def export_adb_lanes(db_path: Path, out_dir: Path, server_url: str) -> Path:
         channels = cur.fetchall()
         log.info("Found %d distinct ADB channels.", len(channels))
 
-        # Load logo URLs from provider_lanes (if column exists)
+        # Ensure logo_url column exists (added in 0.3.x; idempotent)
+        cur.execute("PRAGMA table_info(provider_lanes)")
+        if "logo_url" not in [r[1] for r in cur.fetchall()]:
+            cur.execute("ALTER TABLE provider_lanes ADD COLUMN logo_url TEXT")
+            conn.commit()
+
+        # Load logo URLs from provider_lanes
         provider_logo_urls: Dict[str, Optional[str]] = {}
-        try:
-            cur.execute("SELECT provider_code, logo_url FROM provider_lanes WHERE logo_url IS NOT NULL AND logo_url != ''")
-            for row in cur.fetchall():
-                provider_logo_urls[row["provider_code"]] = row["logo_url"]
-        except Exception:
-            pass  # logo_url column may not exist on older installs
+        cur.execute("SELECT provider_code, logo_url FROM provider_lanes WHERE logo_url IS NOT NULL AND logo_url != ''")
+        for row in cur.fetchall():
+            provider_logo_urls[row["provider_code"]] = row["logo_url"]
 
         # Build programmes: join adb_lanes -> events for titles / synopses
         # We assume events.id, events.start_utc, events.end_utc, events.title, events.synopsis

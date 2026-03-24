@@ -700,6 +700,7 @@ loadSelectionExamples(); // Refresh examples
 });
 
 // Services that have dedicated scrapers — disabling them skips scraping on next refresh
+// Keep in sync with _scraper_enabled() calls in daily_refresh.py
 const SCRAPER_CONTROLLED_SERVICES = new Set([
 'kayo_web', 'kayo',
 'fanatiz_web', 'fanatiz',
