@@ -2363,6 +2363,22 @@ def api_status():
         "AUTO_REFRESH_TIME": os.getenv("AUTO_REFRESH_TIME", ""),
         "HEADLESS": os.getenv("HEADLESS", ""),
         "LOG_LEVEL": os.getenv("LOG_LEVEL", ""),
+        # Scraper enable/disable flags (default true; set to false/0/no to disable)
+        "KAYO_ENABLED": os.getenv("KAYO_ENABLED", ""),
+        "FANATIZ_ENABLED": os.getenv("FANATIZ_ENABLED", ""),
+        "BEIN_ENABLED": os.getenv("BEIN_ENABLED", ""),
+        "NESN_ENABLED": os.getenv("NESN_ENABLED", ""),
+        "VICTORY_ENABLED": os.getenv("VICTORY_ENABLED", ""),
+        "GOTHAM_ENABLED": os.getenv("GOTHAM_ENABLED", ""),
+        "ESPN_ENABLED": os.getenv("ESPN_ENABLED", ""),
+        # Scraper day-range overrides
+        "KAYO_DAYS": os.getenv("KAYO_DAYS", ""),
+        "NESN_DAYS": os.getenv("NESN_DAYS", ""),
+        "ESPN_DAYS": os.getenv("ESPN_DAYS", ""),
+        "GOTHAM_DAYS": os.getenv("GOTHAM_DAYS", ""),
+        "GOTHAM_ZONE": os.getenv("GOTHAM_ZONE", ""),
+        "APPLE_AUTH_BOOTSTRAP": os.getenv("APPLE_AUTH_BOOTSTRAP", ""),
+        "DB_MAINTENANCE": os.getenv("DB_MAINTENANCE", ""),
     }
     # Filter out empty values
     env_vars = {k: v for k, v in env_vars.items() if v}
