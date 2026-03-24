@@ -43,6 +43,7 @@ RUN python3 -m playwright install-deps chromium \
 # --- App code ---
 COPY bin ./bin
 COPY templates ./templates
+COPY VERSION .
 # COPY static ./static
 
 # Ensure runtime dirs exist
