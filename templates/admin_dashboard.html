@@ -418,7 +418,7 @@ fileList.innerHTML = '<p class="stat-value">No files generated yet</p>';
 fileList.innerHTML = '<ul class="file-list">' + files.map(([name, info]) => `
 <li class="file-item">
 <a href="/out/${name}" class="file-name">${name}</a>
-<span class="file-size">${(info.size / 1024 / 1024).toFixed(2)} MB</span>
+<span class="file-size">${(info.size > 0 ? Math.max(0.01, info.size / 1024 / 1024) : 0).toFixed(2)} MB</span>
 </li>
 `).join('') + '</ul>';
 }
