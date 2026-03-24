@@ -3254,17 +3254,18 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
             "future_event_count": row[3],
             "adb_enabled": 0,
             "adb_lane_count": 0,
+            "logo_url": None,
             "created_at": None,
             "updated_at": None
         }
-    
+
 
     # Merge with provider_lanes configuration
     cur.execute("""
-        SELECT provider_code, adb_enabled, adb_lane_count, created_at, updated_at
+        SELECT provider_code, adb_enabled, adb_lane_count, created_at, updated_at, logo_url
         FROM provider_lanes
     """)
-    
+
     for row in cur.fetchall():
         code = row[0]
         if code in services:
@@ -3272,6 +3273,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
             services[code]["adb_lane_count"] = row[2]
             services[code]["created_at"] = row[3]
             services[code]["updated_at"] = row[4]
+            services[code]["logo_url"] = row[5]
         else:
             # Service in provider_lanes but no playables (could be old/disabled)
             display_name = code
@@ -3281,7 +3283,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
                     display_name = get_service_display_name(code)
                 except:
                     display_name = code.upper()
-            
+
             services[code] = {
                 "provider_code": code,
                 "name": display_name,
@@ -3290,6 +3292,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
                 "future_event_count": 0,
                 "adb_enabled": row[1],
                 "adb_lane_count": row[2],
+                "logo_url": row[5],
                 "created_at": row[3],
                 "updated_at": row[4]
             }
@@ -3313,6 +3316,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
                     "future_event_count": 0,
                     "adb_enabled": info.get("adb_enabled", 0) if adb_code == code else 0,
                     "adb_lane_count": info.get("adb_lane_count", 0) if adb_code == code else 0,
+                    "logo_url": info.get("logo_url") if adb_code == code else None,
                     "created_at": info.get("created_at") if adb_code == code else None,
                     "updated_at": info.get("updated_at") if adb_code == code else None
                 }
@@ -3334,6 +3338,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
             if adb_code == code:
                 adb_aggregated[adb_code]["adb_enabled"] = info.get("adb_enabled", 0)
                 adb_aggregated[adb_code]["adb_lane_count"] = info.get("adb_lane_count", 0)
+                adb_aggregated[adb_code]["logo_url"] = info.get("logo_url")
                 adb_aggregated[adb_code]["created_at"] = info.get("created_at")
                 adb_aggregated[adb_code]["updated_at"] = info.get("updated_at")
         
@@ -3355,6 +3360,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
                         'future_event_count': 0,
                         'adb_enabled': 0,
                         'adb_lane_count': 0,
+                        'logo_url': None,
                         'created_at': None,
                         'updated_at': None,
                     }
@@ -3365,6 +3371,7 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
                 if code == 'aiv':
                     amazon_agg['adb_enabled'] = int(info.get('adb_enabled', 0) or 0)
                     amazon_agg['adb_lane_count'] = int(info.get('adb_lane_count', 0) or 0)
+                    amazon_agg['logo_url'] = info.get('logo_url')
                     amazon_agg['created_at'] = info.get('created_at')
                     amazon_agg['updated_at'] = info.get('updated_at')
                 else:
@@ -3381,6 +3388,16 @@ def get_provider_lane_stats(conn: sqlite3.Connection) -> list[dict]:
     # Sort by event count (descending), then by name
     return sorted(filtered_services.values(), key=lambda x: (-x["event_count"], x["name"]))
 
+
+
+def _ensure_logo_url_column(conn: sqlite3.Connection) -> None:
+    """Add logo_url column to provider_lanes if not present (idempotent)."""
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(provider_lanes)")
+    columns = [row[1] for row in cur.fetchall()]
+    if "logo_url" not in columns:
+        cur.execute("ALTER TABLE provider_lanes ADD COLUMN logo_url TEXT")
+        conn.commit()
 
 
 # Provider lane code aliases (legacy -> canonical)
@@ -3522,6 +3539,8 @@ def api_provider_lanes():
 
     # Keep provider_lanes on canonical provider codes (aliases)
     _migrate_provider_lane_aliases(conn)
+    # Ensure logo_url column exists (added in 0.3.x)
+    _ensure_logo_url_column(conn)
     try:
         if request.method == "GET":
             # Use enhanced stats function that shows event counts
@@ -3535,7 +3554,7 @@ def api_provider_lanes():
                 cur.execute(
                     """
                     SELECT provider_code, adb_enabled, adb_lane_count,
-                           created_at, updated_at
+                           created_at, updated_at, logo_url
                       FROM provider_lanes
                      ORDER BY provider_code
                     """
@@ -3574,6 +3593,7 @@ def api_provider_lanes():
             # Normalize values
             enabled_raw = item.get("adb_enabled")
             lane_raw = item.get("adb_lane_count", 0)
+            logo_url = (item.get("logo_url") or "").strip() or None
 
             adb_enabled = 1 if enabled_raw in (1, True, "1", "true", "True") else 0
             try:
@@ -3583,14 +3603,15 @@ def api_provider_lanes():
 
             cur.execute(
                 """
-                INSERT INTO provider_lanes (provider_code, adb_enabled, adb_lane_count, updated_at)
-                VALUES (?, ?, ?, datetime('now'))
+                INSERT INTO provider_lanes (provider_code, adb_enabled, adb_lane_count, logo_url, updated_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
                 ON CONFLICT(provider_code) DO UPDATE SET
                     adb_enabled = excluded.adb_enabled,
                     adb_lane_count = excluded.adb_lane_count,
+                    logo_url = excluded.logo_url,
                     updated_at = datetime('now')
                 """,
-                (code, adb_enabled, adb_lane_count),
+                (code, adb_enabled, adb_lane_count, logo_url),
             )
             updated += 1
 
